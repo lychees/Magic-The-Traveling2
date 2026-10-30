@@ -105,6 +105,7 @@ docs/平衡性评审.md       带日期的历史仿真；建议不等于已实�
    - `state.tactics` 是选择，`state._tacticsActive` 才决定战斗派生是否生效；`recalcAuras/effArmor` 读取派生，禁止污染基础值。
    - rally 用 `m._tacticRally` 记录实际增加量；`finishRoundSummary` 撤除派生并完成摘要，`startRound` 先幂等调用收尾再重置选择。`setTactic` 第三参 `fromGuest` 只供 hostHandleAct 代执行，UI 不用。
    - 新英雄伤害走 `damageHero`，新关键结果走 `recordRoundKey`；不要绕过摘要只写中文日志。
+   - 紧凑 UI 只显示双方英雄伤害、阵亡数和结果；当前战术徽标确认战术，详细日志确认名单与关键结果。`state.roundSummary` 字段齐全不等于 UI 全字段直显，`title` 不能成为键盘/触屏唯一入口。
 9. **速度**：`setBattleSpeed(1|2|4)` 与 `battleDelay(ms)` 只影响表现等待，不得进入随机、行动顺序、伤害、奖励或胜负。
 10. **遗物**：定义在 `RUN_RELICS`；`RUN.relics/_relicDraft` 只存有效 ID；用 `runRelicActive(id,'player')` 接引擎。每场计数放 `state._relicState`，旧档缺 `relics` 补 `[]`，候选无效要安全清理。
 11. localStorage 键：`mtcg-collection` / `mtcg-gold` / `mtcg-econ-v2` / `mtcg-albums` / `mtcg-run` / `mtcg-memorials` / `mtcg-config` / `mtcg-card-overrides` / `mtcg-custom-cards` / `mtcg-theme` / `mtcg-guide-v1` / `mtcg-dev` / `sfx-muted`。
