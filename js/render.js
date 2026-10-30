@@ -9,11 +9,11 @@ function artBg(def) {
 }
 function artHtml(def) {
   const art = def.art || { icon: '❔', hue: 200 };
-  return '<div class="art" style="background:' + artBg(def) + '">' + art.icon + '</div>';
+  return '<div class="art" aria-hidden="true" style="background:' + artBg(def) + '">' + art.icon + '</div>';
 }
 
 function traitsHtml(traits) {
-  return traits.map(t => '<span class="trait-badge" title="' + traitText(t) + '">' + t + '</span>').join('');
+  return traits.map(t => '<span class="trait-badge" title="' + traitText(t) + '" aria-label="' + t + '：' + traitText(t) + '">' + t + '</span>').join('');
 }
 
 // 种族底色类：race0=人族(灰白) race1=精灵族(绿) race2=魔物族(红褐) race3=不死族(黑)
@@ -62,6 +62,10 @@ function minionHtml(m, isEnemy, ghost) {
   if (ghost) classes.push('dying');
   if (m.defense) classes.push('defense'); // 守备表示：卡面横向加宽（宽度×2）
   if (isFlying(m)) classes.push('flying'); // 飞行：视觉上漂浮（不参与战场宽度）
+  const actionable = !ghost && !m.faceDown && !m.defense && m.canAttack && m.atk > 0 &&
+    !m.blind && !(m.petrified > 0) && awake(m);
+  if (actionable && state.phase === 'combat') classes.push('can-attack');
+  if (!ghost && !isEnemy && state.phase === 'deploy' && !state.gameOver) classes.push('deploy-ready');
   const spell = m.spell ? '<div class="m-spell">' + SPELL_TEXT[m.spell] + '</div>' : '<div class="m-spell"></div>';
   const poisonBadge = m.poison > 0
     ? '<span class="trait-badge poison" title="中毒：每轮部署阶段开始时受到 ' + m.poison + ' 点伤害">中毒' + m.poison + '</span>' : '';
@@ -138,7 +142,8 @@ function minionHtml(m, isEnemy, ghost) {
     corners = '<div class="corner c-r rot-handle" data-uid="' + m.uid + '" title="按住拖动旋转卡牌：90°=守备表示，回正=攻击表示">↻</div>';
   }
   if (!ghost && state.epicUid === m.uid) classes.push('epic-in'); // 高费单位入场发光
-  return '<div class="' + classes.join(' ') + '" draggable="' + draggable + '"' + (recallable ? ' title="单击收回手牌（双击查看详情）"' : '') +
+  const a11y = ghost ? '' : ' role="button" tabindex="0" aria-label="' + m.name + '，攻 ' + m.atk + '，甲 ' + effArmor(m) + '，血 ' + Math.max(0, m.curHp) + '，' + (m.defense ? '守备表示' : (actionable ? '可行动' : '攻击表示')) + '；Shift+Enter 查看详情"';
+  return '<div class="' + classes.join(' ') + '" draggable="' + draggable + '"' + (recallable ? ' title="单击收回手牌（双击查看详情）"' : '') + a11y +
     (spellHitStyle ? ' style="' + spellHitStyle + '"' : '') + action + '>' +
     '<div class="m-name">' + m.name + '</div>' +
     (def ? artHtml(def) : '') +
@@ -157,14 +162,16 @@ function handCardHtml(def, i, side) {
   const canAct = state.phase === 'deploy' && !state.gameOver &&
     (state.mode !== 'pvp' || state.deploySide === side);
   const afford = state[side].mana >= cost && canAct;
-  // 法术卡牌：紫边 + 系别徽标 + 法术标签；禁止拖拽落位（盖放走「盖放」按钮）
+  const availability = afford ? '可打出' : (state.phase !== 'deploy' ? '等待部署阶段' : '法力不足或等待部署方');
+  const a11y = ' role="button" tabindex="0" aria-label="' + def.name + '，费用 ' + cost + '，' + availability + '；Enter 出牌，Shift+Enter 查看详情" title="单击出牌 · 双击或 Shift+Enter 查看详情"';
+  // 法术卡牌：系别徽标 + 法术标签；禁止拖拽落位（盖放走「盖放」按钮）
   if (def.type === 'spell') {
     const sch = SCHOOL_INFO[def.school] || { label: '?', color: '#888' };
     const sel = state.spellTargetMode && state.spellTargetMode.def === def ? ' selected' : '';
     const setBtn = afford && NET.role !== 'spectator' && gameConfig.allowSet
       ? '<button class="set-btn" data-action="set-hand" data-idx="' + i + '" title="盖放这张法术卡：翻开时立即结算（需要目标的随机选合法目标）">盖放</button>' : '';
-    return '<div class="hand-card spell-card ' + raceClass(def) + sel + (afford ? '' : ' unaffordable') + '" draggable="false" data-action="play-hand" data-idx="' + i + '"' +
-      ' style="border-color:' + sch.color + ';box-shadow:0 0 10px ' + sch.color + '66;background:linear-gradient(160deg,' + sch.color + '33,#1e1e2e 55%)">' +
+    return '<div class="hand-card spell-card ' + raceClass(def) + sel + (afford ? ' playable' : ' unaffordable') + '" draggable="false" data-action="play-hand" data-idx="' + i + '"' + a11y +
+      ' style="border-color:' + sch.color + ';box-shadow:0 0 10px ' + sch.color + '44;background:linear-gradient(160deg,' + sch.color + '26,#151713 55%)">' +
       '<div class="c-cost">' + cost + '</div>' +
       '<div class="school-badge" style="background:' + sch.color + '" title="' + sch.label + '系法术">' + sch.label + '</div>' +
       '<div class="c-name">' + (def.legend ? '★' : '') + def.name + '</div>' +
@@ -181,7 +188,7 @@ function handCardHtml(def, i, side) {
     ? '<button class="set-btn" data-action="set-hand" data-idx="' + i + '" title="翻面表示盖放（默认守备表示）：不触发战吼；不会成为攻击目标、不主动攻击；仍可回蓝、吃 buff；之后可翻开">盖放</button>' : '';
   const hCorners = afford && NET.role !== 'spectator'
     ? '<div class="corner c-r rot-handle" data-idx="' + i + '" title="按住拖动旋转卡牌：90°=守备入场，180°=盖放，回正=攻击入场">↻</div>' : '';
-  return '<div class="hand-card ' + raceClass(def) + (afford ? '' : ' unaffordable') + '" draggable="' + afford + '" data-action="play-hand" data-idx="' + i + '">' +
+  return '<div class="hand-card ' + raceClass(def) + (afford ? ' playable' : ' unaffordable') + '" draggable="' + afford + '" data-action="play-hand" data-idx="' + i + '"' + a11y + '>' +
     '<div class="c-cost">' + cost + '</div>' +
     '<div class="c-name">' + (def.legend ? '★' : '') + def.name + '</div>' +
     artHtml(def) +
@@ -197,11 +204,66 @@ function heroHtml(side) {
   const p = state[side];
   const isPvp = state.mode === 'pvp';
   const name = isPvp ? sideName(side) : (side === 'enemy' ? '敌方英雄' : '你的英雄');
-  const burned = p.burned > 0 ? ' <span class="burned-tag">下轮法力-' + p.burned + '</span>' : '';
-  return '<div class="portrait">' + (side === 'enemy' ? '👿' : '🧙') + '</div>' +
-    '<div><div class="name">' + name + '</div>' +
-    '<div class="hp">生命 ' + Math.max(0, p.hp) + ' / ' + p.maxHp + '</div>' +
-    '<div class="mana-info">法力 ' + p.mana + ' / ' + p.maxMana + burned + '</div></div>';
+  const burned = p.burned > 0 ? ' <span class="burned-tag">下轮法力 −' + p.burned + '</span>' : '';
+  const hpPct = Math.max(0, Math.min(100, p.maxHp ? p.hp / p.maxHp * 100 : 0));
+  const manaPct = Math.max(0, Math.min(100, p.maxMana ? p.mana / p.maxMana * 100 : 0));
+  const tactic = tacticKeyFor(side);
+  const tacticBadge = tactic ? '<span class="hero-tactic tactic-' + tactic + '">' + UI_TACTICS[tactic].label + ' · 本轮</span>' : '';
+  return '<div class="portrait" aria-hidden="true">' + (side === 'enemy' ? '👿' : '🧙') + '</div>' +
+    '<div class="hero-content"><div class="hero-name-row"><div class="name">' + name + '</div>' + tacticBadge + '</div>' +
+    '<div class="vital-line"><span class="hp">生命 <strong>' + Math.max(0, p.hp) + '</strong><small> / ' + p.maxHp + '</small></span><span class="mana-info">法力 <strong>' + p.mana + '</strong><small> / ' + p.maxMana + '</small>' + burned + '</span></div>' +
+    '<div class="hero-meters" aria-hidden="true"><span class="hp-meter"><i style="width:' + hpPct + '%"></i></span><span class="mana-meter"><i style="width:' + manaPct + '%"></i></span></div></div>';
+}
+
+const UI_TACTICS = Object.freeze({
+  assault: { label: '猛攻', effect: '攻击 +1' },
+  guard: { label: '坚守', effect: '有效护甲 +1' },
+  rally: { label: '集结', effect: '士气 +2' },
+});
+function tacticKeyFor(side) {
+  if (!state || !state.tactics) return null;
+  const value = state.tactics[side];
+  const key = typeof value === 'string' ? value : value && (value.key || value.tactic);
+  return UI_TACTICS[key] ? key : null;
+}
+function updateBattleCommandUi() {
+  const as = activeSide();
+  const chosen = tacticKeyFor(as);
+  const tacticApiReady = typeof setTactic === 'function';
+  const canChoose = tacticApiReady && state.phase === 'deploy' && !state.gameOver &&
+    NET.role !== 'spectator' && localDeployAllowed(as);
+  document.querySelectorAll('[data-action="set-tactic"]').forEach(btn => {
+    const key = btn.dataset.tactic;
+    const selected = key === chosen;
+    btn.disabled = !canChoose;
+    btn.classList.toggle('selected', selected);
+    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    btn.title = UI_TACTICS[key].label + '：本轮己方单位' + UI_TACTICS[key].effect +
+      (selected ? '；再次点击取消' : '；开战前可更改');
+  });
+  const tacticStatus = document.getElementById('tactic-status');
+  if (tacticStatus) tacticStatus.textContent = !tacticApiReady ? '战术模块准备中' :
+    (chosen ? sideName(as) + ' · ' + UI_TACTICS[chosen].label : (canChoose ? '本轮未选择' : '部署阶段可选'));
+  const speed = [1, 2, 4].includes(Number(state.battleSpeed)) ? Number(state.battleSpeed) : 1;
+  const speedApiReady = typeof setBattleSpeed === 'function' && NET.role !== 'spectator';
+  document.querySelectorAll('[data-action="battle-speed"]').forEach(btn => {
+    const selected = Number(btn.dataset.speed) === speed;
+    btn.disabled = !speedApiReady;
+    btn.classList.toggle('active', selected);
+    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+  const summaryEl = document.getElementById('round-summary');
+  if (!summaryEl) return;
+  const summary = state.roundSummary;
+  if (!summary) { summaryEl.textContent = ''; summaryEl.removeAttribute('title'); return; }
+  const damage = summary.heroDamage || {};
+  const lost = summary.unitsLost || {};
+  const outcome = summary.outcome && summary.outcome !== 'ongoing'
+    ? ' · ' + (summary.outcome === 'draw' ? '同归于尽' : sideName(summary.outcome) + '获胜') : '';
+  summaryEl.textContent = '第 ' + summary.round + ' 轮' + (summary.completed ? '战报' : '交战') +
+    ' · ' + sideName('player') + '伤 ' + (damage.player || 0) + ' · ' + sideName('enemy') + '伤 ' + (damage.enemy || 0) +
+    ' · 阵亡 ' + ((lost.player || []).length) + ' / ' + ((lost.enemy || []).length) + outcome;
+  summaryEl.title = (summary.keyResults || []).join('\n');
 }
 
 // 一方场上渲染为三排；上方半场从上到下为 后/中/前，下方半场从上到下为 前/中/后（前排相对峙）。
@@ -210,15 +272,19 @@ function boardHtml(side, isTop) {
   const order = isTop ? [2, 1, 0] : [0, 1, 2];
   const p = state[side];
   const dying = (state.anims && state.anims.dying) || [];
+  const rowHints = ['接触 · 护卫', '策应 · 转移', '远程 · 支援'];
   const rowHtml = r => {
     const ms = p.board.filter(m => m.row === r).map(m => ({ m: m, ghost: false }));
     // 死亡动画：把幽灵卡插回死亡时的排内位置（先晃动再消失，由动画清理统一移除）
     dying.filter(g => g.side === side && g.row === r).forEach(g => {
       ms.splice(Math.min(g.idx, ms.length), 0, { m: g.m, ghost: true });
     });
-    const inner = ms.length ? ms.map(x => minionHtml(x.m, isTop, x.ghost)).join('') : '<div class="empty-hint">（空）</div>';
-    return '<div class="board-row' + (isTop ? '' : ' own-row') + (r === AIR_ROW ? ' air-row' : '') + '" data-row="' + r + '">' +
-      '<div class="row-label">' + ROW_NAMES[r] + '</div>' +
+    const inner = ms.length ? ms.map(x => minionHtml(x.m, isTop, x.ghost)).join('') :
+      '<div class="empty-hint">' + (isTop ? '暂无单位' : '拖拽单位到此排') + '</div>';
+    const rowName = ROW_NAMES[r];
+    const rowHint = r === AIR_ROW ? '飞行 · 奇袭' : rowHints[r];
+    return '<div class="board-row' + (isTop ? '' : ' own-row') + (r === AIR_ROW ? ' air-row' : '') + '" data-row="' + r + '" role="group" aria-label="' + (isTop ? '敌方' : '己方') + rowName + '，' + ms.length + '个单位">' +
+      '<div class="row-label"><strong>' + rowName + '</strong><small>' + rowHint + '</small></div>' +
       '<div class="row-minions">' + inner + '</div></div>';
   };
   const ground = order.map(rowHtml).join('');
@@ -356,19 +422,29 @@ function render() {
   // 视角翻转：双人部署阶段当前部署方在下方半场；其余情况玩家1 在下方
   const vs = viewSide();
   const top = otherSide(vs), bot = vs;
+  const enemyBoard = document.getElementById('enemy-board');
+  const playerBoard = document.getElementById('player-board');
+  enemyBoard.innerHTML = boardHtml(top, true);
+  playerBoard.innerHTML = boardHtml(bot, false);
+  enemyBoard.setAttribute('aria-label', sideName(top) + '的战场，后中前三排');
+  playerBoard.setAttribute('aria-label', sideName(bot) + '的战场，前中后三排');
 
-  document.getElementById('enemy-board').innerHTML = boardHtml(top, true);
-  document.getElementById('player-board').innerHTML = boardHtml(bot, false);
-
-  document.getElementById('enemy-deck').innerHTML = pileHtml(top, 'deck');
-  document.getElementById('enemy-grave').innerHTML = pileHtml(top, 'grave');
-  document.getElementById('player-deck').innerHTML = pileHtml(bot, 'deck');
-  document.getElementById('player-grave').innerHTML = pileHtml(bot, 'grave');
+  const piles = [
+    ['enemy-deck', top, '牌库'], ['enemy-grave', top, '墓地'],
+    ['player-deck', bot, '牌库'], ['player-grave', bot, '墓地'],
+  ];
+  piles.forEach(entry => {
+    const el = document.getElementById(entry[0]);
+    const p = state[entry[1]];
+    el.innerHTML = pileHtml(entry[1], entry[2] === '牌库' ? 'deck' : 'grave');
+    const count = entry[2] === '牌库' ? p.deck.length : p.graveyard.length;
+    el.setAttribute('aria-label', '查看' + sideName(entry[1]) + '的' + entry[2] + '，' + count + ' 张');
+  });
 
   // 上方手牌恒为卡背；下方手牌：人机模式或部署阶段显示真牌，双人进攻阶段也盖卡背（全员观战）
   document.getElementById('enemy-hand').innerHTML =
-    '<span style="font-size:12px;color:#8a8a9a;">' + sideName(top) + '手牌 ' + state[top].hand.length + ' 张</span>' +
-    state[top].hand.map(() => '<div class="card-back"></div>').join('');
+    '<span class="hand-count">' + sideName(top) + '手牌 <strong>' + state[top].hand.length + '</strong> 张</span>' +
+    state[top].hand.map(() => '<div class="card-back" aria-hidden="true"></div>').join('');
   const showHand = state.mode === 'ai' || state.phase === 'deploy';
   // 联机瘦客户端：未 reveal 的手牌是 null 占位，此时盖卡背
   const botHandReal = showHand && state[bot].hand.every(c => !!c);
@@ -376,27 +452,30 @@ function render() {
   if (state[bot].hand.every(c => !!c)) state[bot].hand.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   document.getElementById('player-hand').innerHTML = botHandReal
     ? state[bot].hand.map((c, i) => handCardHtml(c, i, bot)).join('')
-    : ('<span style="font-size:12px;color:#8a8a9a;">' + sideName(bot) + '手牌 ' + state[bot].hand.length + ' 张</span>' +
-       state[bot].hand.map(() => '<div class="card-back"></div>').join(''));
+    : ('<span class="hand-count">' + sideName(bot) + '手牌 <strong>' + state[bot].hand.length + '</strong> 张</span>' +
+       state[bot].hand.map(() => '<div class="card-back" aria-hidden="true"></div>').join(''));
 
-  document.getElementById('enemy-hero').innerHTML = heroHtml(top);
-  document.getElementById('player-hero').innerHTML = heroHtml(bot);
+  const enemyHero = document.getElementById('enemy-hero');
+  const playerHero = document.getElementById('player-hero');
+  enemyHero.innerHTML = heroHtml(top);
+  playerHero.innerHTML = heroHtml(bot);
+  enemyHero.setAttribute('aria-label', sideName(top) + '英雄，生命 ' + Math.max(0, state[top].hp) + '/' + state[top].maxHp + '，法力 ' + state[top].mana + '/' + state[top].maxMana);
+  playerHero.setAttribute('aria-label', sideName(bot) + '英雄，生命 ' + Math.max(0, state[bot].hp) + '/' + state[bot].maxHp + '，法力 ' + state[bot].mana + '/' + state[bot].maxMana);
   // 英雄被直击时晃动
   const heroHit = state.anims && state.anims.heroHit;
-  document.getElementById('enemy-hero').classList.toggle('shake', heroHit === top);
-  document.getElementById('player-hero').classList.toggle('shake', heroHit === bot);
+  enemyHero.classList.toggle('shake', heroHit === top);
+  playerHero.classList.toggle('shake', heroHit === bot);
   // 治疗选目标模式：己方英雄高亮可点
-  document.getElementById('player-hero').classList.toggle('targetable',
+  playerHero.classList.toggle('targetable',
     !!(state.spellTargetMode && state.spellTargetMode.def && state.spellTargetMode.def.spellEffect === 'heal'));
 
   // 区域标签
-  document.getElementById('enemy-label').textContent = state.mode === 'pvp' ? sideName(top) : '敌方';
+  document.getElementById('enemy-label').textContent = state.mode === 'pvp' ? sideName(top) + ' · 敌方半场' : '敌方半场';
   document.getElementById('hand-label').textContent =
     state.mode === 'pvp' && state.phase !== 'deploy' ? '进攻阶段 · 双方观战'
-    : (state.mode === 'pvp' ? sideName(bot) + '的手牌' : '你的手牌') +
-      '（点击打出：近战默认前排、远程默认后排；也可直接拖到某排指定位置）';
+    : (state.mode === 'pvp' ? sideName(bot) + '的手牌' : '你的手牌') + ' · 单击出牌 / 拖拽布阵 / 双击查看详情';
 
-  let phaseText = state.phase === 'deploy' ? '部署阶段' : '进攻阶段';
+  let phaseText = state.phase === 'deploy' ? '部署阶段' : '自动战斗';
   if (state.mode === 'pvp' && state.phase === 'deploy') phaseText += ' · ' + sideName(state.deploySide);
   // 联机：非己方部署时明确提示等待
   if (NET.role && NET.role !== 'spectator' && state.phase === 'deploy' && !state.gameOver &&
@@ -419,6 +498,9 @@ function render() {
       : (state.mode === 'pvp' && state.deploySide === 'player' ? '完成部署' : '开始战斗');
     btn.disabled = state.phase !== 'deploy' || state.gameOver;
   }
+  btn.setAttribute('aria-label', btn.textContent);
+  updateBattleCommandUi();
+  updateGuideVisibility();
   // 战术预览面板随渲染刷新
   renderTacPreview();
 }
@@ -551,24 +633,25 @@ function raceShade(race, l) {
 }
 function dbCardBg(def) {
   const schC = def.type === 'spell' ? (SCHOOL_INFO[def.school] || {}).color : null;
-  if (schC) return 'background:linear-gradient(160deg,' + schC + '44,#1e1e2e 55%)';
-  return 'background:linear-gradient(180deg,' + raceShade(def.race, 26) + ',' + raceShade(def.race, 14) + ' 55%, #0c0c12)';
+  if (schC) return 'background:linear-gradient(160deg,' + schC + '30,#141713 58%)';
+  return 'background:linear-gradient(180deg,' + raceShade(def.race, 24) + ',' + raceShade(def.race, 13) + ' 58%, #10130f)';
 }
 
 function dbCardHtml(def) {
   const n = curSel[def.name] || 0;
   const max = maxCopiesOf(def);
-  // 法术卡牌：紫边 + 系别徽标 + 法术标签，不显示三维
+  const a11y = ' role="button" tabindex="0" aria-label="将' + def.name + '加入牌组，费用 ' + def.cost + '，已选 ' + n + ' 张，最多 ' + max + ' 张；Shift+Enter 查看详情" title="单击加入牌组 · 双击或 Shift+Enter 查看详情"';
+  const badges = '<div class="c-cost" aria-label="费用 ' + def.cost + '">' + def.cost + '</div>' +
+    '<div class="picked-badge">' + (n ? '已选 ' + n + '/' + max : '可带 ' + max) + '</div>' +
+    '<div class="rating-badge" title="战斗力评分 ' + def.rating + '">' + def.rating + '</div>';
+  // 法术卡牌：系别徽标 + 法术标签，不显示三维
   if (def.type === 'spell') {
     const sch = SCHOOL_INFO[def.school] || { label: '?', color: '#888' };
-    return '<div class="db-card spell-card ' + raceClass(def) + (n >= max ? ' maxed' : '') + '" data-action="add-card" data-name="' + def.name + '"' +
-      ' style="border-color:' + sch.color + ';box-shadow:0 0 10px ' + sch.color + '66;' + dbCardBg(def) + '">' +
-      '<div class="c-cost">' + def.cost + '</div>' +
-      '<div class="picked-badge">已选 ' + n + '/' + max + '</div>' +
-      '<div class="rating-badge" title="强度评分">' + def.rating + '</div>' +
+    return '<div class="db-card spell-card ' + raceClass(def) + (n >= max ? ' maxed' : '') + (n ? ' in-deck' : '') + '" data-action="add-card" data-name="' + def.name + '"' + a11y +
+      ' style="border-color:' + sch.color + ';box-shadow:0 0 10px ' + sch.color + '38;' + dbCardBg(def) + '">' + badges +
       '<div class="school-badge" style="background:' + sch.color + '" title="' + sch.label + '系法术">' + sch.label + '</div>' +
       '<div class="c-name">' + (def.legend ? '★' : '') + def.name + '</div>' +
-      '<div class="c-own" style="text-align:center;font-size:10px;color:#8a8a9a;">拥有 ×' + ownedOf(def.name) + '</div>' +
+      '<div class="c-own">拥有 ×' + ownedOf(def.name) + '</div>' +
       artHtml(def) +
       '<div class="spell-label">法术 · ' + sch.label + '系</div>' +
       '<div class="c-spell">' + SPELL_FX_TEXT[def.spellEffect] + '</div>' +
@@ -577,13 +660,10 @@ function dbCardHtml(def) {
   const spellText = def.spell ? SPELL_TEXT[def.spell]
     : (def.actSpell ? '法术·' + UNIT_SPELL_TEXT[def.actSpell] : '');
   const spell = spellText ? '<div class="c-spell">' + spellText + '</div>' : '<div class="c-spell"></div>';
-  return '<div class="db-card ' + raceClass(def) + (n >= max ? ' maxed' : '') + '" data-action="add-card" data-name="' + def.name + '"' +
-    ' style="' + dbCardBg(def) + '">' +
-    '<div class="c-cost">' + def.cost + '</div>' +
-    '<div class="picked-badge">已选 ' + n + '/' + max + '</div>' +
-    '<div class="rating-badge" title="强度评分">' + def.rating + '</div>' +
+  return '<div class="db-card ' + raceClass(def) + (n >= max ? ' maxed' : '') + (n ? ' in-deck' : '') + '" data-action="add-card" data-name="' + def.name + '"' + a11y +
+    ' style="' + dbCardBg(def) + '">' + badges +
     '<div class="c-name">' + (def.legend ? '★' : '') + def.name + '</div>' +
-    '<div class="c-own" style="text-align:center;font-size:10px;color:#8a8a9a;">拥有 ×' + ownedOf(def.name) + '</div>' +
+    '<div class="c-own">拥有 ×' + ownedOf(def.name) + '</div>' +
     artHtml(def) +
     '<div class="c-traits">' + traitsHtml(def.traits || []) + '</div>' +
     spell +
@@ -713,7 +793,7 @@ const FILTER_GROUPS = [
 function costBucket(cost) { return cost >= 7 ? 7 : cost; }
 
 function matchBuilderFilter(d) {
-  if (builderKw && cardSearchText(d).indexOf(builderKw) < 0) return false; // 关键字：名称 + 全部描述文字
+  if (builderKw && cardSearchText(d).toLocaleLowerCase().indexOf(builderKw.toLocaleLowerCase()) < 0) return false;
   if (builderFilter.races[d.race]) return false;
   if (builderFilter.costs[costBucket(d.cost)]) return false;
   const ty = d.type === 'spell' ? 'spell' : 'unit';
@@ -727,66 +807,97 @@ function matchBuilderFilter(d) {
   return true;
 }
 
+let builderSort = 'race';
+const BUILDER_SORTS = [
+  { value: 'race', label: '按阵营分区' },
+  { value: 'cost', label: '费用：从低到高' },
+  { value: 'costDesc', label: '费用：从高到低' },
+  { value: 'rating', label: '战斗力：从高到低' },
+  { value: 'name', label: '名称：拼音顺序' },
+];
+function compareBuilderCards(a, b) {
+  if (builderSort === 'costDesc') return b.cost - a.cost || a.name.localeCompare(b.name, 'zh-CN');
+  if (builderSort === 'rating') return (b.rating || 0) - (a.rating || 0) || a.cost - b.cost || a.name.localeCompare(b.name, 'zh-CN');
+  if (builderSort === 'name') return a.name.localeCompare(b.name, 'zh-CN');
+  return a.cost - b.cost || a.name.localeCompare(b.name, 'zh-CN');
+}
+
 function renderPoolFilter() {
-  const html = FILTER_GROUPS.map(g => {
+  const previous = document.getElementById('builder-filter-details');
+  const narrowScreen = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 800px)').matches;
+  const filtersOpen = previous ? previous.open : !narrowScreen;
+  const activeCount = Object.keys(builderFilter).reduce((n, key) => n + Object.keys(builderFilter[key]).length, 0);
+  const groups = FILTER_GROUPS.map(g => {
     const include = !!g.include;
     const anyOff = include ? false : g.vals().some(x => builderFilter[g.key][x.v]);
     const anyOn = include && g.vals().some(x => builderFilter[g.key][x.v]);
-    return '<div class="filter-row"><span class="filter-label">' + g.label + '</span>' +
-      g.vals().map(x =>
-        '<span class="filter-chip' + (include
-          ? (builderFilter[g.key][x.v] ? '' : ' off')          // 词条：未选中=灰
-          : (builderFilter[g.key][x.v] ? ' off' : '')) +        // 其他：被排除=灰
-        '" data-action="filter-chip" data-group="' + g.key + '" data-val="' + x.v + '"' +
-        (include ? ' title="' + (x.v === '__vanilla__' ? '没有任何特性（词条/战吼/亡语/法术）的单位' : (traitText(x.v) || x.v)) + '"' : '') + '>' + x.t + '</span>'
-      ).join('') +
-      '<span class="filter-chip filter-toggle-all" data-action="filter-toggle-all" data-group="' + g.key + '">' +
-        (include ? (anyOn ? '清除' : '全选') : (anyOff ? '全选' : '全不选')) + '</span></div>';
-  }).join('') +
-  '<div class="filter-row"><span class="filter-label">搜索</span><input id="pool-kw" class="filter-kw" type="text" placeholder="卡牌名称 / 描述关键字" value="' + builderKw.replace(/"/g, '&quot;') + '"></div>' +
-  '<div class="filter-row"><button class="filter-reset" data-action="filter-reset">重置筛选</button></div>';
-  document.getElementById('pool-filter').innerHTML = html;
+    return '<div class="filter-row"><span class="filter-label">' + g.label + '</span><div class="filter-values">' +
+      g.vals().map(x => {
+        const on = include ? !!builderFilter[g.key][x.v] : !builderFilter[g.key][x.v];
+        return '<button type="button" class="filter-chip' + (on ? '' : ' off') + '" data-action="filter-chip" data-group="' + g.key + '" data-val="' + x.v + '" aria-pressed="' + on + '"' +
+          (include ? ' title="' + (x.v === '__vanilla__' ? '没有任何特性（词条/战吼/亡语/法术）的单位' : (traitText(x.v) || x.v)) + '"' : '') + '>' + x.t + '</button>';
+      }).join('') +
+      '<button type="button" class="filter-chip filter-toggle-all" data-action="filter-toggle-all" data-group="' + g.key + '">' +
+        (include ? (anyOn ? '清除' : '全选') : (anyOff ? '全选' : '全不选')) + '</button></div></div>';
+  }).join('');
+  const sortOptions = BUILDER_SORTS.map(o => '<option value="' + o.value + '"' + (builderSort === o.value ? ' selected' : '') + '>' + o.label + '</option>').join('');
+  document.getElementById('pool-filter').innerHTML =
+    '<div class="library-toolbar">' +
+      '<label class="search-box" for="pool-kw"><span aria-hidden="true">⌕</span><input id="pool-kw" class="filter-kw" type="search" placeholder="搜索名称、阵营、词条或效果…" autocomplete="off" spellcheck="false" value="' + builderKw.replace(/"/g, '&quot;') + '"></label>' +
+      '<label class="sort-control" for="pool-sort"><span>排序</span><select id="pool-sort" class="btn">' + sortOptions + '</select></label>' +
+      '<button type="button" class="btn btn-ghost filter-reset" data-action="filter-reset">重置</button>' +
+    '</div>' +
+    '<details id="builder-filter-details" class="filter-details"' + (filtersOpen ? ' open' : '') + '><summary><span>精细筛选</span><small>' + (activeCount ? activeCount + ' 项已调整' : '阵营 / 费用 / 类型 / 派系 / 词条') + '</small></summary><div class="filter-groups">' + groups + '</div></details>';
 }
 
 // ---------- 对局规则配置 UI ----------
 function renderGameRules() {
   const chips = (vals, cur, action) => vals.map(v =>
-    '<span class="filter-chip' + (cur === v ? '' : ' off') + '" data-action="' + action + '" data-val="' + v + '" style="text-decoration:none;">' + v + '</span>'
+    '<button type="button" class="filter-chip' + (cur === v ? '' : ' off') + '" data-action="' + action + '" data-val="' + v + '" aria-pressed="' + (cur === v) + '">' + v + '</button>'
   ).join('');
   const toggle = (on, action, label) =>
-    '<span class="filter-chip' + (on ? '' : ' off') + '" data-action="' + action + '">' + label + '：' + (on ? '允许' : '禁用') + '</span>';
+    '<button type="button" class="filter-chip' + (on ? '' : ' off') + '" data-action="' + action + '" aria-pressed="' + on + '">' + label + '：' + (on ? '允许' : '禁用') + '</button>';
   document.getElementById('game-rules').innerHTML =
-    '<div class="filter-row"><span class="filter-label">生命值</span>' + chips([10, 15, 20, 25, 30], gameConfig.heroHp, 'rule-hp') + '</div>' +
-    '<div class="filter-row"><span class="filter-label">法力上限</span>' + chips([5, 8, 10, 12, 15], gameConfig.maxMana, 'rule-mana') + '</div>' +
-    '<div class="filter-row">' + toggle(gameConfig.allowSet, 'rule-toggle-set', '盖牌') +
-    toggle(gameConfig.allowDefense, 'rule-toggle-defense', '守备表示') + '</div>';
+    '<div class="filter-row"><span class="filter-label">生命值</span><div class="filter-values">' + chips([10, 15, 20, 25, 30], gameConfig.heroHp, 'rule-hp') + '</div></div>' +
+    '<div class="filter-row"><span class="filter-label">法力上限</span><div class="filter-values">' + chips([5, 8, 10, 12, 15], gameConfig.maxMana, 'rule-mana') + '</div></div>' +
+    '<div class="filter-row"><span class="filter-label">部署</span><div class="filter-values">' + toggle(gameConfig.allowSet, 'rule-toggle-set', '盖牌') +
+    toggle(gameConfig.allowDefense, 'rule-toggle-defense', '守备表示') + '</div></div>';
 }
 
 function renderBuilder() {
   renderPoolFilter();
   renderGameRules();
-  const owned = ownedDefs().filter(matchBuilderFilter);
-  // 单位卡按阵营分区；法术卡单独一个「法术」大分区（按系别分组、组内按费用排序）
-  const unitHtml = RACES.map(race => {
-    const cards = owned.filter(d => d.race === race && d.type !== 'spell')
-      .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
-    if (cards.length === 0) return '';
-    return '<div class="race-section"><h2>' + race + '</h2><div class="race-cards">' +
-      cards.map(dbCardHtml).join('') + '</div></div>';
-  }).join('');
-  const spellCards = owned.filter(d => d.type === 'spell');
-  const spellHtml = spellCards.length
-    ? '<div class="race-section"><h2>法术</h2>' +
-      ['土', '水', '火', '气'].map(sch => {
-        const cards = spellCards.filter(d => d.school === sch).sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
-        if (cards.length === 0) return '';
-        const color = (SCHOOL_INFO[sch] || {}).color || '#888';
-        return '<div class="school-group"><h3 style="font-size:13px;color:#c9a0f0;margin:6px 2px 4px;">' +
-          '<span class="race-dot" style="background:' + color + '"></span>' + sch + '系</h3>' +
-          '<div class="race-cards">' + cards.map(dbCardHtml).join('') + '</div></div>';
-      }).join('') + '</div>'
-    : '';
-  document.getElementById('card-pool').innerHTML = (unitHtml + spellHtml) || '<div class="deck-empty">收藏为空，请先开卡包</div>';
+  const allOwned = ownedDefs();
+  const owned = allOwned.filter(matchBuilderFilter);
+  const libraryCount = document.getElementById('library-count');
+  libraryCount.innerHTML = '<strong>' + owned.length + '</strong><span> / ' + allOwned.length + ' 种</span><small>收藏共 ' + ownedTotal() + ' 张</small>';
+  let poolHtml = '';
+  if (builderSort === 'race') {
+    // 单位卡按阵营分区；法术卡单独一个「法术」大分区（按系别分组、组内按费用排序）
+    poolHtml = RACES.map(race => {
+      const cards = owned.filter(d => d.race === race && d.type !== 'spell').sort(compareBuilderCards);
+      if (cards.length === 0) return '';
+      return '<section class="race-section"><h2><span>' + race + '</span><small>' + cards.length + ' 种</small></h2><div class="race-cards">' +
+        cards.map(dbCardHtml).join('') + '</div></section>';
+    }).join('');
+    const spellCards = owned.filter(d => d.type === 'spell');
+    poolHtml += spellCards.length
+      ? '<section class="race-section spell-section"><h2><span>法术</span><small>' + spellCards.length + ' 种</small></h2>' +
+        ['土', '水', '火', '气'].map(sch => {
+          const cards = spellCards.filter(d => d.school === sch).sort(compareBuilderCards);
+          if (cards.length === 0) return '';
+          const color = (SCHOOL_INFO[sch] || {}).color || '#888';
+          return '<div class="school-group"><h3><span class="race-dot" style="background:' + color + '"></span>' + sch + '系 <small>' + cards.length + ' 种</small></h3>' +
+            '<div class="race-cards">' + cards.map(dbCardHtml).join('') + '</div></div>';
+        }).join('') + '</section>'
+      : '';
+  } else {
+    const sorted = owned.slice().sort(compareBuilderCards);
+    poolHtml = '<section class="race-section sorted-results"><h2><span>全部卡牌</span><small>' + sorted.length + ' 种</small></h2><div class="race-cards">' + sorted.map(dbCardHtml).join('') + '</div></section>';
+  }
+  document.getElementById('card-pool').innerHTML = poolHtml ||
+    '<div class="deck-empty library-empty"><strong>' + (allOwned.length ? '没有符合条件的卡牌' : '收藏为空，请先开卡包') + '</strong><span>' + (allOwned.length ? '试试清除搜索词或重置筛选。' : '从顶部导航选择卡包或阵营商店。') + '</span>' +
+    (allOwned.length ? '<button class="btn" data-action="filter-reset">重置筛选</button>' : '') + '</div>';
   updateGoldUi();
 
   // 双人模式：步骤指示（玩家1/玩家2 组牌中）
@@ -794,38 +905,55 @@ function renderBuilder() {
     builderMode === 'pvp' ? ('玩家 ' + builderStep + ' 的牌组') : '我的牌组';
 
   const total = selCount();
+  const ready = canStartBattle();
   const cnt = document.getElementById('deck-count');
-  cnt.textContent = total + ' / ' + DECK_MAX + (total < DECK_MIN ? '（还差 ' + (DECK_MIN - total) + ' 张）' : '');
-  cnt.classList.toggle('ready', canStartBattle());
+  cnt.innerHTML = '<strong>' + total + '</strong><span> / ' + DECK_MAX + ' 张</span>';
+  cnt.classList.toggle('ready', ready);
+  const progress = document.getElementById('deck-progress');
+  progress.setAttribute('aria-valuemax', DECK_MAX);
+  progress.setAttribute('aria-valuenow', total);
+  progress.setAttribute('aria-valuetext', total + ' 张，' + (ready ? '可以开战' : '至少需要 ' + DECK_MIN + ' 张'));
+  document.getElementById('deck-progress-fill').style.width = Math.min(100, total / DECK_MAX * 100) + '%';
+  progress.querySelector('i').style.left = (DECK_MIN / DECK_MAX * 100) + '%';
+  const readiness = document.getElementById('deck-readiness');
+  readiness.classList.toggle('ready', ready);
+  readiness.textContent = ownedTotal() < DECK_MIN ? '收藏不足 ' + DECK_MIN + ' 张，请先开卡包' :
+    (total < DECK_MIN ? '还需 ' + (DECK_MIN - total) + ' 张即可开战' : (ready ? '牌组已就绪，可以开战' : '牌组尚未就绪'));
 
-  const picked = CARD_DEFS.filter(d => (curSel[d.name] || 0) > 0);
+  const picked = CARD_DEFS.filter(d => (curSel[d.name] || 0) > 0)
+    .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name, 'zh-CN'));
   document.getElementById('deck-list').innerHTML = picked.length
     ? picked.map(d =>
-        '<div class="deck-item" data-action="remove-card" data-name="' + d.name + '" title="点击移除一张">' +
-        '<span><span class="d-cost">' + d.cost + '</span>' + d.name + '</span>' +
-        '<span class="d-n">×' + curSel[d.name] + '</span></div>'
+        '<button type="button" class="deck-item" data-action="remove-card" data-name="' + d.name + '" title="单击移除一张 · 双击查看详情" aria-label="从牌组移除一张' + d.name + '，当前 ' + curSel[d.name] + ' 张">' +
+        '<span><span class="d-cost">' + d.cost + '</span><span class="d-name">' + d.name + '</span></span>' +
+        '<span class="d-n">×' + curSel[d.name] + '</span></button>'
       ).join('')
-    : '<div class="deck-empty">（点击左侧卡牌加入牌组，每张最多 ' + MAX_COPIES + ' 张）</div>';
+    : '<div class="deck-empty"><strong>牌组还是空的</strong><span>从预设开始，或单击卡库卡牌加入；每种最多 ' + MAX_COPIES + ' 张。</span></div>';
 
   // 法力曲线 + 阵营统计，随牌组增删实时刷新
   const st = deckStats();
   const maxC = Math.max(1, Math.max.apply(null, st.curve));
   document.getElementById('mana-curve').innerHTML = st.curve.map((n, i) =>
-    '<div class="bar-col" title="费用 ' + CURVE_LABELS[i] + '：' + n + ' 张">' +
-    '<div class="bar-n">' + (n || '') + '</div>' +
-    '<div class="bar" style="height:' + Math.round(n / maxC * 54) + 'px"></div>' +
+    '<div class="bar-col" role="img" aria-label="费用 ' + CURVE_LABELS[i] + '：' + n + ' 张" title="费用 ' + CURVE_LABELS[i] + '：' + n + ' 张">' +
+    '<div class="bar-n">' + (n || '–') + '</div>' +
+    '<div class="bar-track"><div class="bar" style="height:' + Math.round(n / maxC * 62) + 'px"></div></div>' +
     '<div class="bar-x">' + CURVE_LABELS[i] + '</div></div>'
   ).join('');
-  document.getElementById('race-stats').innerHTML = RACES.map((r, i) =>
-    '<div class="race-stat"><span class="race-dot" style="background:' + RACE_DOT[i] + '"></span>' +
-    r + ' ' + st.races[r].kinds + ' 种 · ' + st.races[r].total + ' 张</div>'
-  ).join('') +
-  '<div class="race-stat"><span class="race-dot" style="background:#b06ae8"></span>法术 ' + st.spells.kinds + ' 种 · ' + st.spells.total + ' 张</div>';
+  const raceRows = RACES.map((r, i) => ({ race: r, color: RACE_DOT[i], stats: st.races[r] }))
+    .filter(x => x.stats.total > 0).sort((a, b) => b.stats.total - a.stats.total);
+  const raceHtml = raceRows.map(x =>
+    '<div class="race-stat"><span class="race-stat-name"><span class="race-dot" style="background:' + x.color + '"></span>' + x.race + '</span>' +
+    '<strong>' + x.stats.total + '<small> 张</small></strong><small>' + x.stats.kinds + ' 种</small></div>').join('');
+  const spellRow = st.spells.total ? '<div class="race-stat spell-stat"><span class="race-stat-name"><span class="race-dot"></span>法术</span><strong>' + st.spells.total + '<small> 张</small></strong><small>' + st.spells.kinds + ' 种</small></div>' : '';
+  document.getElementById('race-stats').innerHTML = (raceHtml + spellRow) || '<div class="deck-empty">加入卡牌后显示阵营与法术构成。</div>';
 
   // 预设卡组：一键填充当前牌组选择
-  document.getElementById('preset-decks').innerHTML = PRESET_DECKS.map((p, i) =>
-    '<button class="btn" data-action="preset-deck" data-idx="' + i + '" style="width:100%;margin-top:4px;">' + p.name + '</button>'
-  ).join('');
+  document.getElementById('preset-decks').innerHTML = PRESET_DECKS.map((p, i) => {
+    const parts = p.name.split(' · ');
+    const count = Object.keys(p.cards).reduce((n, key) => n + p.cards[key], 0);
+    return '<button class="btn preset-card" data-action="preset-deck" data-idx="' + i + '" aria-label="应用预设牌组' + p.name + '，' + count + ' 张">' +
+      '<span><strong>' + parts[0] + '</strong><small>' + (parts.slice(1).join(' · ') || '主题牌组') + '</small></span><span class="preset-count">' + count + ' 张</span></button>';
+  }).join('');
 
   const sb = document.getElementById('start-battle');
   if (ownedTotal() < DECK_MIN) {
@@ -839,6 +967,8 @@ function renderBuilder() {
     sb.textContent = builderMode === 'pvp' && builderStep === 1 ? '确认并交给玩家2' : '开始战斗';
     sb.disabled = !canStartBattle();
   }
+  sb.setAttribute('aria-label', sb.textContent);
+  updateGuideVisibility();
 }
 
 // ---------- 集卡册浮层 ----------
@@ -988,6 +1118,27 @@ function scheduleClickAction(key, run) {
   pendingClick = { key: key, timer: timer, run: run };
 }
 
+const GUIDE_STORAGE_KEY = 'mtcg-guide-v1';
+function readGuideState() {
+  try {
+    const saved = JSON.parse(storage.getItem(GUIDE_STORAGE_KEY) || '{}');
+    return { builderDone: !!saved.builderDone, battleDone: !!saved.battleDone };
+  } catch (e) { return { builderDone: false, battleDone: false }; }
+}
+function completeGuide(kind) {
+  const guide = readGuideState();
+  guide[kind] = true;
+  try { storage.setItem(GUIDE_STORAGE_KEY, JSON.stringify(guide)); } catch (e) {}
+  updateGuideVisibility();
+}
+function updateGuideVisibility() {
+  const guide = readGuideState();
+  const builderGuide = document.getElementById('first-run-guide');
+  const battleGuide = document.getElementById('battle-guide');
+  if (builderGuide) builderGuide.style.display = guide.builderDone ? 'none' : 'flex';
+  if (battleGuide) battleGuide.style.display = !guide.battleDone && state && state.round <= 1 ? 'flex' : 'none';
+}
+
 function showBuilder() {
   netLeave(); // 联机：返回组牌即离开房间（host 会广播 closed）
   closeViewer();
@@ -998,6 +1149,7 @@ function showBuilder() {
   document.getElementById('roguelike').style.display = 'none';
   document.getElementById('game').style.display = 'none';
   document.getElementById('deckbuilder').style.display = 'block';
+  document.body.dataset.screen = 'builder';
   // 双人模式回到玩家1 组牌（两方上次选择都保留）
   builderStep = 1;
   curSel = builderSel;
@@ -1009,9 +1161,17 @@ function setBuilderMode(mode) {
   builderMode = mode;
   builderStep = 1;
   curSel = builderSel;
-  document.getElementById('mode-ai').classList.toggle('active', mode === 'ai');
-  document.getElementById('mode-pvp').classList.toggle('active', mode === 'pvp');
-  document.getElementById('mode-net').classList.toggle('active', mode === 'net');
+  ['ai', 'pvp', 'net'].forEach(key => {
+    const btn = document.getElementById('mode-' + key);
+    btn.classList.toggle('active', mode === key);
+    btn.setAttribute('aria-pressed', mode === key ? 'true' : 'false');
+  });
+  const descriptions = {
+    ai: '与战术 AI 练习组牌、阵型与指令。',
+    pvp: '两位玩家依次组牌与部署，隐私屏保护手牌。',
+    net: '通过房间码邀请好友，或作为观战者加入。',
+  };
+  document.getElementById('mode-description').textContent = descriptions[mode] || descriptions.ai;
   document.getElementById('net-panel').style.display = mode === 'net' ? 'block' : 'none';
   if (mode === 'net' && !netAvailable()) netStatus('联机组件不可用（PeerJS CDN 加载失败），本地模式不受影响');
   renderBuilder();
@@ -1020,6 +1180,7 @@ function setBuilderMode(mode) {
 function showGame() {
   document.getElementById('deckbuilder').style.display = 'none';
   document.getElementById('game').style.display = 'flex'; // flex 布局（左侧战斗记录边栏）
+  document.body.dataset.screen = 'battle';
 }
 
 // ---------- 交互 ----------
@@ -1057,7 +1218,9 @@ document.addEventListener('click', e => {
     return;
   }
   if (action === 'filter-reset') {
-    Object.keys(builderFilter).forEach(k => { builderFilter[k] = {}; }); builderKw = '';
+    Object.keys(builderFilter).forEach(k => { builderFilter[k] = {}; });
+    builderKw = '';
+    builderSort = 'race';
     renderBuilder();
     return;
   }
@@ -1127,6 +1290,23 @@ document.addEventListener('click', e => {
   if (action === 'view-deck' || action === 'view-grave') {
     const posSide = el.dataset.side === 'enemy' ? otherSide(viewSide()) : viewSide();
     openViewer(posSide, action === 'view-deck' ? 'deck' : 'grave');
+    return;
+  }
+
+  if (action === 'battle-speed') {
+    const speed = parseInt(el.dataset.speed, 10);
+    if ([1, 2, 4].includes(speed) && typeof setBattleSpeed === 'function') setBattleSpeed(speed);
+    render();
+    return;
+  }
+  if (action === 'set-tactic') {
+    if (state.gameOver || NET.role === 'spectator' || state.phase !== 'deploy' || typeof setTactic !== 'function') return;
+    const side = activeSide();
+    if (!localDeployAllowed(side)) return;
+    const key = el.dataset.tactic;
+    if (!UI_TACTICS[key]) return;
+    const next = tacticKeyFor(side) === key ? null : key;
+    if (setTactic(side, next) !== false) render();
     return;
   }
 
@@ -1424,9 +1604,41 @@ document.addEventListener('dblclick', e => {
   }
 });
 
-// Esc 关闭浮层
+// 键盘操作：Enter/Space 激活，Shift+Enter 查看卡牌，Esc 关闭浮层，Tab 限制在最上层对话框内。
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (window.__holo) window.__holo.close(); closeDetail(); closeViewer(); }
+  if (e.key === 'Escape') {
+    if (window.__holo) window.__holo.close();
+    closeDetail();
+    closeViewer();
+    const grave = document.getElementById('grave-pick');
+    if (grave.classList.contains('show')) { hideGravePick(); if (state) render(); }
+    return;
+  }
+  if (e.key === 'Tab') {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'))
+      .filter(el => el.getClientRects().length > 0)
+      .sort((a, b) => (parseInt(getComputedStyle(b).zIndex, 10) || 0) - (parseInt(getComputedStyle(a).zIndex, 10) || 0));
+    const dialog = dialogs[0];
+    if (!dialog) return;
+    const focusable = Array.from(dialog.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.getClientRects().length > 0);
+    if (!focusable.length) { e.preventDefault(); dialog.focus(); return; }
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    return;
+  }
+  const card = e.target.closest('.hand-card, .minion, .db-card, .deck-item, [data-card-name]');
+  if (card && e.target === card && e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault();
+    card.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
+    return;
+  }
+  const actionable = e.target.closest('[role="button"][data-action], #net-room-code[role="button"]');
+  if (actionable && e.target === actionable && actionable.tagName !== 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    actionable.click();
+  }
 });
 
 // ---------- 拖拽（仅部署阶段：己方随从布阵 + 手牌拖拽落位出牌） ----------
@@ -1641,11 +1853,21 @@ document.addEventListener('input', e => {
   const kw = document.getElementById('pool-kw');
   if (kw) { kw.focus(); kw.setSelectionRange(pos, pos); }
 });
+document.addEventListener('change', e => {
+  if (!e.target || e.target.id !== 'pool-sort') return;
+  builderSort = BUILDER_SORTS.some(o => o.value === e.target.value) ? e.target.value : 'race';
+  renderBuilder();
+  const sort = document.getElementById('pool-sort');
+  if (sort) sort.focus();
+});
+document.getElementById('guide-close').addEventListener('click', () => completeGuide('builderDone'));
+document.getElementById('battle-guide-close').addEventListener('click', () => completeGuide('battleDone'));
 document.getElementById('end-turn').addEventListener('click', onActionButton);
 // 日志展开/收起
 document.getElementById('log-expand').addEventListener('click', () => {
   const el = document.getElementById('log');
-  el.classList.toggle('expanded');
+  const expanded = el.classList.toggle('expanded');
+  document.getElementById('log-expand').setAttribute('aria-expanded', expanded ? 'true' : 'false');
   el.scrollTop = el.scrollHeight;
 });
 document.getElementById('pass-continue').addEventListener('click', confirmPass);
@@ -1659,6 +1881,7 @@ let devMode = storage.getItem('mtcg-dev') === '1';
 function updateDevUi() {
   document.getElementById('dev-gold').style.display = devMode ? '' : 'none';
   document.getElementById('dev-toggle').classList.toggle('active', devMode);
+  document.getElementById('dev-toggle').setAttribute('aria-pressed', devMode ? 'true' : 'false');
 }
 document.getElementById('dev-toggle').addEventListener('click', () => {
   devMode = !devMode;

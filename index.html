@@ -11,136 +11,251 @@
 <body>
 <!-- ========== 组牌界面 ========== -->
 <div id="deckbuilder">
-  <div id="topbar">
-    <h1>使魔卡牌对战 · 组牌</h1>
-    <div>
-      <span id="gold-display" title="金币余额">🪙 0</span>
-      <button class="btn" id="open-pack">开卡包（100🪙）</button>
-      <span id="shop" style="display:inline-flex;gap:4px;align-items:center;" title="阵营商店">
-        <select id="shop-race" class="btn" style="padding:4px 6px;"></select>
-        <button class="btn" id="buy-fpack">阵营卡包（150🪙）</button>
-        <button class="btn" id="buy-fbox">阵营卡盒（600🪙）</button>
-      </span>
-      <button class="btn" id="open-album">集卡册</button>
-      <button class="btn" id="open-roguelike">闯关模式</button>
-      <button class="btn" id="open-card-editor">卡牌编辑器</button>
-      <select id="theme-select" class="btn" style="padding:4px 6px;" title="画面风格">
-        <option value="default">原版</option>
-        <option value="skeuo">拟物</option>
-        <option value="pixel">像素 RPG</option>
-      </select>
-      <button class="btn" id="dev-toggle" title="开发者模式：开启后显示刷钱按钮">开发者模式</button>
+  <a class="skip-link" href="#db-main">跳至组牌工作台</a>
+  <header id="topbar" class="app-header">
+    <div class="brand-lockup">
+      <span class="brand-kicker">MAGIC THE TRAVELING</span>
+      <h1><span class="brand-mark" aria-hidden="true">MT</span><span>使魔卡牌对战<small>战术组牌工作台</small></span></h1>
+    </div>
+    <div class="header-utilities">
+      <span id="gold-display" title="金币余额" aria-label="金币余额">🪙 0</span>
+      <label class="theme-control" for="theme-select"><span>画风</span>
+        <select id="theme-select" class="btn" title="画面风格" aria-label="画面风格">
+          <option value="default">深色烫金</option>
+          <option value="skeuo">皮革拟物</option>
+          <option value="pixel">像素 RPG</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost" id="dev-toggle" title="开发者模式：开启后显示刷钱按钮" aria-pressed="false">开发者模式</button>
       <button class="btn" id="dev-gold" style="display:none" title="开发者刷钱：+1000 金币">+1000🪙</button>
-      <button class="btn mode-btn active" id="mode-ai">人机对战</button>
-      <button class="btn mode-btn" id="mode-pvp">双人对战</button>
-      <button class="btn mode-btn" id="mode-net">联机对战</button>
     </div>
-  </div>
-  <!-- 联机面板（选择「联机对战」模式时显示） -->
-  <div id="net-panel" style="display:none">
-    <div class="net-row">
-      <input id="net-name" class="net-input" placeholder="昵称（可空）">
-      <input id="net-pwd" class="net-input" placeholder="房间密码（可空）">
-      <input id="net-code-input" class="net-input" placeholder="房间码（加入/观战必填）">
-      <button class="btn" id="net-host">开房间</button>
-      <button class="btn" id="net-join">加入房间</button>
-      <button class="btn" id="net-watch">观战</button>
+  </header>
+  <nav class="primary-nav" aria-label="主导航">
+    <div class="nav-group">
+      <span class="nav-label">收藏与补给</span>
+      <div class="nav-actions">
+        <button class="btn" id="open-pack">开卡包 <span class="btn-meta">100🪙</span></button>
+        <span id="shop" title="阵营商店">
+          <label class="sr-only" for="shop-race">选择阵营卡包</label>
+          <select id="shop-race" class="btn" aria-label="阵营商店阵营"></select>
+          <button class="btn" id="buy-fpack">阵营卡包 <span class="btn-meta">150🪙</span></button>
+          <button class="btn" id="buy-fbox">阵营卡盒 <span class="btn-meta">600🪙</span></button>
+        </span>
+        <button class="btn" id="open-album">集卡册</button>
+      </div>
     </div>
-    <div class="net-row">
-      <span id="net-room-code" title="点击复制房间码"></span>
-      <span id="net-status"></span>
+    <div class="nav-group">
+      <span class="nav-label">远征与工具</span>
+      <div class="nav-actions">
+        <button class="btn" id="open-roguelike">闯关模式</button>
+        <button class="btn" id="open-card-editor">卡牌编辑器</button>
+        <button class="btn" id="open-holo">✨ 3D 检视</button>
+      </div>
     </div>
-  </div>
+  </nav>
+
+  <section id="first-run-guide" class="guide-banner" aria-labelledby="guide-title" style="display:none">
+    <div class="guide-emblem" aria-hidden="true">✦</div>
+    <div class="guide-copy">
+      <span class="section-kicker">首次远征</span>
+      <h2 id="guide-title">三步组建你的第一副牌组</h2>
+      <ol class="guide-steps">
+        <li><strong>选模式与预设</strong><span>从左侧选择人机对战，再用阵营预设快速成牌。</span></li>
+        <li><strong>微调牌组</strong><span>搜索卡库、单击加牌；在右侧移除卡牌并检查法力曲线。</span></li>
+        <li><strong>确认开战</strong><span>凑齐至少 20 张后，点击「开始战斗」进入部署。</span></li>
+      </ol>
+    </div>
+    <button class="btn btn-ghost" id="guide-close" aria-label="关闭组牌新手引导">知道了，开始组牌</button>
+  </section>
+
   <div id="db-main">
-    <div id="pool-wrap">
+    <aside id="db-setup-rail" aria-label="对局设置">
+      <section class="setup-panel mode-panel" aria-labelledby="mode-title">
+        <div class="section-heading"><span class="step-number">01</span><div><span class="section-kicker">GAME MODE</span><h2 id="mode-title">选择对局</h2></div></div>
+        <div id="builder-mode-switch" class="mode-switch" role="group" aria-label="对战模式">
+          <button class="btn mode-btn active" id="mode-ai" aria-pressed="true"><strong>人机对战</strong><small>单人 · 即刻开战</small></button>
+          <button class="btn mode-btn" id="mode-pvp" aria-pressed="false"><strong>双人对战</strong><small>同机热座 · 隐私交机</small></button>
+          <button class="btn mode-btn" id="mode-net" aria-pressed="false"><strong>联机对战</strong><small>房间码 · 好友或观战</small></button>
+        </div>
+        <p id="mode-description" class="mode-description">与战术 AI 练习组牌、阵型与指令。</p>
+      </section>
+
+      <div id="net-panel" style="display:none" aria-label="联机房间设置">
+        <div class="net-row">
+          <label class="sr-only" for="net-name">昵称</label><input id="net-name" class="net-input" placeholder="昵称（可空）">
+          <label class="sr-only" for="net-pwd">房间密码</label><input id="net-pwd" class="net-input" placeholder="房间密码（可空）">
+          <label class="sr-only" for="net-code-input">房间码</label><input id="net-code-input" class="net-input" placeholder="房间码（加入/观战必填）">
+        </div>
+        <div class="net-row net-actions">
+          <button class="btn" id="net-host">开房间</button>
+          <button class="btn" id="net-join">加入房间</button>
+          <button class="btn" id="net-watch">观战</button>
+        </div>
+        <div class="net-row net-status-row">
+          <span id="net-room-code" title="点击复制房间码" role="button" tabindex="0" aria-label="复制房间码"></span>
+          <span id="net-status" role="status"></span>
+        </div>
+      </div>
+
+      <section class="setup-panel preset-panel" aria-labelledby="preset-title">
+        <div class="section-heading"><span class="step-number">02</span><div><span class="section-kicker">QUICK START</span><h2 id="preset-title">从预设启程</h2></div></div>
+        <p class="section-note">一键填充合法牌组，再按你的战术微调。</p>
+        <div id="preset-decks"></div>
+        <button class="btn btn-ghost" id="random-deck">随机生成牌组</button>
+      </section>
+
+      <details class="setup-panel advanced-rules">
+        <summary><span>对局规则</span><small>生命、法力与部署选项</small></summary>
+        <div id="game-rules"></div>
+      </details>
+    </aside>
+
+    <main id="pool-wrap" aria-labelledby="library-title">
+      <header class="library-heading">
+        <div><span class="section-kicker">CARD LIBRARY</span><h2 id="library-title">卡库</h2><p>检索名称、词条或效果，单击加入牌组。</p></div>
+        <div id="library-count" class="library-count" role="status" aria-live="polite"></div>
+      </header>
       <div id="pool-filter"></div>
       <div id="card-pool"></div>
-    </div>
-    <div id="db-sidebar">
-      <h3 id="deck-title">我的牌组</h3>
+    </main>
+
+    <aside id="db-sidebar" aria-labelledby="deck-title">
+      <div class="deck-heading">
+        <div><span class="section-kicker">YOUR WARBAND</span><h3 id="deck-title">我的牌组</h3></div>
+        <span class="deck-step">03 / 完成牌组</span>
+      </div>
       <div id="deck-count">0 / 60</div>
+      <div id="deck-progress" class="deck-progress" role="progressbar" aria-label="牌组成牌进度" aria-valuemin="0" aria-valuemax="60" aria-valuenow="0"><span id="deck-progress-fill"></span><i aria-hidden="true"></i></div>
+      <p id="deck-readiness" role="status">还需 20 张即可开战</p>
+      <div class="deck-list-heading"><span>牌组清单</span><small>单击移除一张</small></div>
       <div id="deck-list"></div>
-      <div class="sb-label">法力曲线</div>
-      <div id="mana-curve"></div>
-      <div class="sb-label">阵营统计</div>
-      <div id="race-stats"></div>
-      <div class="sb-label">对局规则</div>
-      <div id="game-rules"></div>
-      <div class="sb-label">预设卡组</div>
-      <div id="preset-decks"></div>
-      <button class="btn" id="random-deck">随机牌组</button>
-      <button class="btn" id="open-holo">✨ 3D 检视</button>
-      <button class="btn btn-danger" id="clear-deck">清空</button>
-      <button class="btn btn-primary" id="start-battle" disabled>开始战斗</button>
-    </div>
+      <details class="deck-analytics" open>
+        <summary>牌组分析</summary>
+        <div class="sb-label">法力曲线 <small>按费用统计张数</small></div>
+        <div id="mana-curve" aria-label="牌组法力曲线"></div>
+        <div class="sb-label">阵营统计 <small>单位与法术构成</small></div>
+        <div id="race-stats"></div>
+      </details>
+      <div class="deck-footer-actions">
+        <button class="btn btn-ghost" id="clear-deck">清空牌组</button>
+        <button class="btn btn-primary" id="start-battle" disabled>开始战斗</button>
+      </div>
+      <p class="deck-shortcuts">单击加牌 / 移除 · 双击或 Shift + Enter 查看卡牌详情</p>
+    </aside>
   </div>
 </div>
 
 <!-- ========== 对战界面 ========== -->
 <div id="game" style="display:none">
-  <div id="layout-main">
-  <div id="topbar">
-    <h1>使魔卡牌对战</h1>
-    <div>
-      <button class="btn" id="sfx-toggle" title="音效开关">🔊</button>
-      <button class="btn btn-ghost" id="back-builder">返回组牌</button>
-    </div>
-  </div>
+  <a class="skip-link" href="#player-hand">跳至当前手牌</a>
+  <main id="layout-main">
+    <header id="topbar" class="app-header battle-header">
+      <div class="brand-lockup"><span class="brand-kicker">TACTICAL BATTLEFIELD</span><h1><span class="brand-mark" aria-hidden="true">MT</span><span>使魔卡牌对战<small>深色书房 · 战术桌面</small></span></h1></div>
+      <div class="header-utilities">
+        <button class="btn btn-ghost" id="sfx-toggle" title="音效开关" aria-label="切换音效">🔊</button>
+        <button class="btn btn-ghost" id="back-builder">返回组牌</button>
+      </div>
+    </header>
 
-  <div class="zone-label" id="enemy-label">敌方</div>
-  <div class="hero-row">
-    <div class="hero" id="enemy-hero"></div>
-    <div class="hand-back-row" id="enemy-hand"></div>
-    <div class="pile" id="enemy-deck" data-action="view-deck" data-side="enemy" title="点击查看敌方牌库"></div>
-    <div class="pile" id="enemy-grave" data-action="view-grave" data-side="enemy" title="点击查看敌方墓地"></div>
-  </div>
-  <div class="board" id="enemy-board"></div>
+    <section id="battle-guide" class="battle-guide" aria-label="首轮战斗引导" style="display:none">
+      <strong>首轮部署</strong>
+      <ol><li>单击手牌出牌</li><li>用单位按钮切换守备</li><li>选择本轮战术指令</li><li>点击开始战斗</li></ol>
+      <button class="icon-btn" id="battle-guide-close" aria-label="关闭战斗引导">×</button>
+    </section>
 
-  <div id="midbar">
-    <button id="end-turn">开始战斗</button>
-    <div id="turn-indicator"></div>
-  </div>
+    <section class="army-zone enemy-zone" aria-labelledby="enemy-label">
+      <div class="zone-label" id="enemy-label">敌方</div>
+      <div class="hero-row">
+        <div class="hero enemy-hero" id="enemy-hero"></div>
+        <div class="hand-back-row" id="enemy-hand" aria-label="对手手牌"></div>
+        <div class="pile" id="enemy-deck" data-action="view-deck" data-side="enemy" title="点击查看敌方牌库" role="button" tabindex="0"></div>
+        <div class="pile" id="enemy-grave" data-action="view-grave" data-side="enemy" title="点击查看敌方墓地" role="button" tabindex="0"></div>
+      </div>
+      <div class="board" id="enemy-board" aria-label="敌方战场"></div>
+    </section>
 
-  <div class="board" id="player-board"></div>
-  <div class="hero-row">
-    <div class="hero" id="player-hero"></div>
-    <div class="pile" id="player-deck" data-action="view-deck" data-side="player" title="点击查看我的牌库"></div>
-    <div class="pile" id="player-grave" data-action="view-grave" data-side="player" title="点击查看我的墓地"></div>
-  </div>
-  <div class="zone-label" id="hand-label">你的手牌（点击打出：近战默认前排、远程默认后排；也可直接拖到某排指定位置）</div>
-  <div id="player-hand"></div>
+    <section id="midbar" aria-label="战斗指挥台">
+      <div class="turn-panel">
+        <span class="section-kicker">ROUND & PHASE</span>
+        <div id="turn-indicator" role="status" aria-live="polite"></div>
+        <div id="round-summary" class="round-summary" aria-live="polite"></div>
+      </div>
+      <div id="tactic-control" class="command-panel">
+        <div class="command-heading"><span>本轮战术指令</span><small id="tactic-status">尚未选择</small></div>
+        <div class="tactic-options" role="group" aria-label="选择本轮战术指令">
+          <button class="tactic-btn" data-action="set-tactic" data-tactic="assault" aria-pressed="false" title="本轮己方单位攻击 +1"><strong>猛攻</strong><small>全军攻击 +1</small></button>
+          <button class="tactic-btn" data-action="set-tactic" data-tactic="guard" aria-pressed="false" title="本轮己方单位有效护甲 +1"><strong>坚守</strong><small>有效护甲 +1</small></button>
+          <button class="tactic-btn" data-action="set-tactic" data-tactic="rally" aria-pressed="false" title="本轮己方单位士气 +2"><strong>集结</strong><small>全军士气 +2</small></button>
+        </div>
+      </div>
+      <div class="execution-panel">
+        <div id="speed-control">
+          <span class="command-label">战斗速度</span>
+          <div class="speed-options" role="group" aria-label="战斗播放速度">
+            <button data-action="battle-speed" data-speed="1" class="speed-btn active" aria-pressed="true" aria-label="1 倍战斗速度">1×</button>
+            <button data-action="battle-speed" data-speed="2" class="speed-btn" aria-pressed="false" aria-label="2 倍战斗速度">2×</button>
+            <button data-action="battle-speed" data-speed="4" class="speed-btn" aria-pressed="false" aria-label="4 倍战斗速度">4×</button>
+          </div>
+        </div>
+        <button id="end-turn" class="btn-primary">开始战斗</button>
+      </div>
+    </section>
+    <div class="frontline-caption" aria-hidden="true"><span></span>前排相接 · 中排策应 · 后排支援<span></span></div>
 
-  <details id="rules">
-    <summary>规则说明</summary>
-    <div>
-      三维 = 攻击 / 护甲 / 生命。护甲可减免每次受到的攻击伤害（法术伤害不受护甲减免）。<br>
-      回合结构：每轮分两个阶段——部署阶段双方同时出牌布阵（你点「开始战斗」后 AI 一次性完成部署）；进攻阶段双方单位按 攻击+有效护甲+当前生命 的总和从高到低自动行动（并列随机先后），全部行动完进入下一轮。<br>
-      阵型：场上分为 前排 / 中排 / 后排。点击手牌打出时近战默认放前排、远程默认放后排；部署阶段也可以直接把手牌拖到某一排的指定位置出牌（拖到排内空白放排尾，拖到某张随从上插入其前），并可拖拽己方场上随从在三排间移动或同排调整顺序。<br>
-      收回：部署阶段单击本轮刚从手牌打出、且没有战吼/亡语等入场效果的随从，可将其收回手牌并退还实际支付的法力（手牌满时不可收回；召唤物与 token 不可收回）。<br>
-      攻击规则（进攻阶段自动执行）：近战单位按「战场宽度」选目标——每张卡占 1 宽度（守备表示占 2），各排居中对齐，前排会遮挡正后方的区域；只有暴露宽度大于 0 的单位才能被近战攻击，且目标按暴露宽度加权随机选取（例：前排 1 卡 + 后排 2 卡时，命中概率为 50% / 25% / 25%；前后排各 1 卡时，后排卡在前排卡死前无法被近战攻击）。飞行单位漂浮在空中，不参与战场宽度计算（不遮挡也不被遮挡）。远程单位无视遮挡、可攻击任意一排。只有对方场上没有随从、或对方所有随从都无法成为你的合法目标时，才能攻击英雄本体——但只要对方还有守备表示的单位或远程单位，就必须先打完它们。飞行单位守备时暂时失去飞行效果。<br>
-      反击规则：每个随从每战斗阶段有 1 次反击机会（进攻阶段开始时重置；「反击X」特性为 X 次，如皇家狮鹫反击2）。随从受到攻击造成的伤害（含溅射）且存活时，若还有反击机会、攻击力大于 0、且按射程规则能够到伤害来源（非远程只能够到对方最前排、远程任意排、飞行限制照旧），便立刻反击并消耗一次；够不到或 0 攻则不消耗，之后被能反击的攻击打中仍会反击。**远程单位的攻击不会触发反击**（无论站位）；带「不受反击」特性的单位（恶魔、大恶魔）同样不会触发反击。以上免反击只对普通反击有效——**攻击守备表示的单位时，必然同时受到守备单位攻击力的反击**（无视其他免反击特性，但守备单位无法反击远程单位）。反击造成的伤害不再触发反击。中毒等非攻击伤害不触发反击。<br>
-      连击（神射手）：攻击随从时连续攻击 2 次，第二次不触发反击；目标已死于第一次攻击则第二次落空。复活（大天使）：战吼——将己方墓地中最后死亡的一张随从满状态复活到其原排。<br>
-      远程：可攻击任意一排，优先攻击飞行单位，且对飞行单位伤害加倍；攻击不会触发反击。飞行：只能被远程或飞行单位攻击，被远程攻击时受到的伤害加倍；悬浮于空中区域、不参与战场宽度；正面表示时可在 落地/起飞 间切换（落地暂时失去飞行、移到前排地面阵型，可用按钮或旋转 180° 切换）。骑兵：速度翻倍（行动顺序按三围总和×2）；攻击时若速度大于对方两倍，不会触发反击。掠夺：攻击敌方英雄时获得 5 金币。拒马：可以对骑兵进行反击。<br>
-      再生X：每轮部署阶段开始时恢复 X 点生命。毒LvX：被攻击造成伤害的随从中毒（重复取最高 Lv），中毒者在每轮部署阶段开始时受 X 点伤害。<br>
-      单位法术：部分随从带可主动施放的法术，部署阶段点击随从卡上的施放按钮即可（不占用出牌）。随从法力在每轮准备阶段开始时恢复 1 点（不超过上限）。分裂（史莱姆系，1 法力）：当前生命为偶数时一分为二，各半血、其它特效保留；火球（魔女/精灵法师，1 法力）：对随机一个敌方随从造成 1~6 点法术伤害。三姐妹：场上每个其它名称包含「鹰身女妖」的单位 +2攻/+2血（可叠加）。恐狼光环：同排左右相邻的友方随从 +1 攻击（多只可叠加）。和平：不会发起可能令自己死亡的攻击（若目标反击会致死则跳过）。死亡凝视（蛮牛）：攻击时 25% 概率直接消灭目标随从（无视生命与护甲）。护甲穿透X（比蒙系）：攻击无视目标 X 点护甲。守备表示：部署阶段可在攻击/守备之间切换；守备单位不主动攻击，但无限次反击且反击伤害与对手的攻击同时结算，被随机选取的概率 ×2（卡面变宽两倍）。翻面表示：手牌可盖放部署（默认守备表示，不触发战吼）；翻面单位不会成为攻击目标、不主动攻击、不反击，但仍每轮恢复法术、可吃到 buff；部署阶段可翻开（翻开时结算战吼；已在场的单位不能再盖回）。盖牌守备的单位会被选中攻击，并在被攻击前揭示。<br>
-      法术卡牌：紫边卡牌（土/水/火/气四系），从手牌打出不入场、结算后进墓地（骨龙可减费）。无需目标的法术点击直接结算；需要目标的法术点击进入选目标模式（高亮合法目标，点击目标结算，点空白或再点该卡取消）。法术卡也可盖放：成为场上的盖牌（非单位、不被攻击），翻开时立即结算——需要目标的法术随机选合法目标，无合法目标则不生效。法术伤害受「法术护盾X」减免。<br>
-      范围攻击：攻击随从时，对被攻击随从左右两边相邻的随从造成等量溅射（各自结算护甲，溅射受伤也会触发反击）。石化：生命未满时护甲视为 4。石像形态：守备表示时护甲 +2、攻击 -2。吸血：造成的伤害等量恢复自身生命。法术护盾X：受到的法术伤害 -X。火系魔法免疫（凤凰、火鸟、火精灵、烈火精灵、火元素、烈火元素）：不受火系法术影响（火球术、烧灼、地狱烈焰、末日审判、魔女火球等）。<br>
-      法力燃烧X：攻击敌方英雄时对方下一轮法力 -X。驱魔（如圣骑士）：被该单位击杀的使魔不触发亡语。<br>
-      检索类亡语（如骷髅、骷髅弓手）：从牌库检索一张同名卡置入手牌。魅魔：战吼——随机夺取一个敌方随从。死神：战吼——消灭攻击力最高的敌方随从。骨龙/骸骨巨龙：打出时除外己方墓地，每张除外牌费用 -1。<br>
-      士气：每个单位 -10 ~ +10。正士气每点 = 10% 概率在行动后额外行动一次（每战斗阶段限一次）；负士气每点 = 10% 概率本回合无法行动，且反击（含守备表示的同时结算反击）有同等概率失败。士气流转：造成伤害 +1、击杀额外 +1、受到伤害 -1；伤害被护甲完全抵挡时防守方 +1（守备表示格挡时伤害来源额外 -1）；每轮开始时，我方全场同阵营则全场 +1，两种阵营无影响，x（≥3）种阵营时 -(x-2)。墓园（亡灵）与元素城单位不受士气影响，也不参与阵营计算，盖牌同样不参与士气结算；但我方战场存在（非盖牌）墓园单位时，所有单位士气额外 -1。<br>
-      每轮部署阶段开始时双方各摸一张牌，法力水晶上限 10。英雄生命 20，先击倒对方英雄者胜。牌库抽空后每次摸牌受到递增的疲劳伤害。随从死亡进入墓地。<br>
-      收藏与卡包：对局结束获得金币（胜 100 / 平 50 / 负 30）；100 金币开一包（5 张全卡池随机，稀有度按评分着色：灰/蓝/紫/金）。组牌只能使用收藏中已拥有的卡，每种携带数不超过拥有数（最多 4 张）；首次运行赠送全部白板卡各 2 张与 200 金币。<br>
-      联机对战：基于 PeerJS 公共云 P2P（无自有服务器）。开房间生成 6 位房间码（可设密码），对方凭房间码加入或观战；房主浏览器权威执行全部规则并广播个性化快照（对手只见自己的手牌，观战不见任何手牌）。密码只是轻量校验、非安全方案；公共 P2P 与 NAT 穿透不保证 100% 可达，连接失败请重试或换网络。
-    </div>
-  </details>
-  </div>
-  <aside id="log-sidebar">
-    <div id="log-header"><span>战斗记录</span><button id="log-expand" title="展开 / 收起日志">⤢</button></div>
-    <div id="log"></div>
+    <section class="army-zone player-zone" aria-labelledby="hand-label">
+      <div class="board" id="player-board" aria-label="己方战场"></div>
+      <div class="hero-row">
+        <div class="hero player-hero" id="player-hero"></div>
+        <div class="pile" id="player-deck" data-action="view-deck" data-side="player" title="点击查看我的牌库" role="button" tabindex="0"></div>
+        <div class="pile" id="player-grave" data-action="view-grave" data-side="player" title="点击查看我的墓地" role="button" tabindex="0"></div>
+      </div>
+      <div class="zone-label" id="hand-label">你的手牌（点击打出：近战默认前排、远程默认后排；也可直接拖到某排指定位置）</div>
+      <div id="player-hand" aria-label="当前手牌"></div>
+    </section>
+
+    <details id="rules">
+      <summary><span>战术手册</span><small>先读速查，再按需展开完整规则</small></summary>
+      <div class="rules-content">
+        <section class="rules-quick" aria-labelledby="rules-quick-title">
+          <h2 id="rules-quick-title">30 秒速查</h2>
+          <ol><li><strong>部署：</strong>花费法力打出单位，拖入前 / 中 / 后三排。</li><li><strong>定策：</strong>需要保护英雄就切守备；每轮可选猛攻、坚守或集结。</li><li><strong>开战：</strong>单位按速度与阵型自动战斗，先击倒敌方英雄者获胜。</li></ol>
+        </section>
+        <details class="rule-section" open><summary>回合、属性与阵型</summary><div>
+          <p><strong>三维</strong> = 攻击 / 护甲 / 生命。护甲可减免每次受到的攻击伤害（法术伤害不受护甲减免）。每轮分部署与进攻两个阶段；双方法力恢复并各摸一张牌，进攻阶段按攻击 + 有效护甲 + 当前生命的总和从高到低自动行动，并列随机。</p>
+          <p><strong>三排：</strong>近战点击打出默认前排，远程默认后排；也可拖到手牌目标排或拖动场上单位调整位置与顺序。本轮刚打出且没有入场效果的单位可单击收回并退还法力。</p>
+          <p><strong>战术指令：</strong>猛攻使己方单位本轮攻击 +1；坚守使有效护甲 +1；集结使士气 +2。指令只持续当轮，可在开战前更改；速度控件只改变战斗播放速度。</p>
+        </div></details>
+        <details class="rule-section"><summary>攻击、战场宽度与反击</summary><div>
+          <p>近战按战场宽度选目标：每卡占 1 宽度（守备占 2），前排遮挡正后方区域，目标按暴露宽度加权随机。远程无视遮挡并优先攻击飞行单位；飞行不占宽度，只能被远程或飞行单位攻击，被远程攻击时伤害加倍。</p>
+          <p>只有对方场上没有随从、或所有随从都无法成为合法目标时才能攻击英雄；但守备单位与远程单位仍会构成必须先清除的防线。伤害 = 攻击 − 有效护甲，护甲穿透与词条可改变结果。</p>
+          <p>每单位每战斗阶段默认有 1 次反击机会。受伤存活且够得到伤害来源时立即反击；远程攻击不会触发普通反击。守备单位不主动攻击、可无限次反击且与对手攻击同时结算，但无法反击远程单位。反击不再触发反击。</p>
+          <p>连击会连续攻击两次，第二次不触发反击；复活可将己方最后死亡的随从满状态复活到原排。</p>
+        </div></details>
+        <details class="rule-section"><summary>姿态、飞行与常用词条</summary><div>
+          <p><strong>守备：</strong>部署阶段可在攻击 / 守备间切换；守备卡占 2 宽度，被随机选取概率 ×2。飞行守备时暂时失去飞行效果。</p>
+          <p><strong>翻面：</strong>手牌可盖放（默认守备，不触发战吼）；翻面单位不主动攻击或反击，可在部署阶段翻开并结算战吼。盖牌守备仍会成为攻击目标，并在被攻击前揭示。</p>
+          <p><strong>移动与词条：</strong>飞行单位可落地 / 起飞；骑兵速度翻倍且速度优势足够大时免普通反击；拒马可对骑兵反击；再生 X 每轮恢复 X 生命；毒 LvX 每轮造成 X 伤害；吸血按伤害恢复自身生命；范围攻击会溅射相邻单位；法术护盾 X 减免 X 点法术伤害。</p>
+          <p><strong>特殊词条：</strong>石化在生命未满时护甲视为 4；石像形态守备时护甲 +2、攻击 −2；死亡凝视有 25% 概率直接消灭目标；护甲穿透 X 无视目标 X 点护甲；驱魔使被击杀单位不触发亡语。</p>
+        </div></details>
+        <details class="rule-section"><summary>法术、单位法术与士气</summary><div>
+          <p>法术卡分土 / 水 / 火 / 气四系，从手牌结算后进入墓地。需要目标的法术会高亮合法目标；也可盖放，翻开时立即结算。部分单位带主动法术，部署阶段点击单位上的施放按钮即可，单位法力每轮恢复 1 点。</p>
+          <p>每个单位士气 −10 至 +10：正士气每点提供 10% 额外行动概率，负士气每点提供 10% 无法行动及反击失败概率。造成伤害与击杀会提升士气，受伤会降低士气。每轮单一阵营全军 +1，两种无影响，三种及以上会受到阵营混杂惩罚；墓园与元素不参与此计算。</p>
+          <p>分裂可在当前生命为偶数时一分为二；三姐妹按不同名鹰身女妖强化彼此；恐狼光环强化同排相邻友军；和平不会发起可能令自己死亡的攻击。火系魔法免疫单位不受火系法术影响。</p>
+        </div></details>
+        <details class="rule-section"><summary>胜负、收藏与联机</summary><div>
+          <p>英雄生命默认 20，先击倒对方英雄者胜。牌库抽空后每次摸牌受到递增疲劳伤害。对局结束获得金币（胜 100 / 平 50 / 负 30），卡包与阵营商店可扩充收藏。</p>
+          <p>联机基于 PeerJS 公共云 P2P：房主权威执行规则并广播个性化快照，对手与观战者只能看到获准的信息。房间密码只是轻量校验，公共 P2P 与 NAT 穿透不保证 100% 可达。</p>
+        </div></details>
+      </div>
+    </details>
+  </main>
+  <aside id="log-sidebar" aria-label="战斗记录">
+    <div id="log-header"><span>战斗记录</span><button id="log-expand" title="展开 / 收起日志" aria-label="展开或收起战斗记录">⤢</button></div>
+    <div id="log" role="log" aria-label="详细战斗记录" tabindex="0"></div>
   </aside>
 </div>
 
-<div id="overlay">
+<div id="overlay" role="dialog" aria-modal="true" aria-labelledby="result-text" tabindex="-1">
   <div class="panel">
     <div class="result" id="result-text"></div>
     <div class="gold-gain" id="gold-gain" style="font-size:15px;color:#ffd700;margin-bottom:16px;"></div>
@@ -148,11 +263,11 @@
   </div>
 </div>
 
-<div id="roguelike" style="display:none">
+<div id="roguelike" style="display:none" role="dialog" aria-modal="true" aria-label="Roguelike 闯关模式" tabindex="-1">
   <div id="rl-body"></div>
 </div>
 
-<div id="card-editor" style="display:none">
+<div id="card-editor" style="display:none" role="dialog" aria-modal="true" aria-label="卡牌编辑器" tabindex="-1">
   <div class="ce-head">
     <h1 style="font-size:20px;margin:0;">卡牌编辑器</h1>
     <div>
@@ -168,7 +283,7 @@
   <div id="ce-body"></div>
 </div>
 
-<div id="viewer">
+<div id="viewer" role="dialog" aria-modal="true" aria-labelledby="viewer-title" tabindex="-1">
   <div class="panel">
     <div class="v-title" id="viewer-title"></div>
     <div class="v-list" id="viewer-list"></div>
@@ -176,7 +291,7 @@
   </div>
 </div>
 
-<div id="detail">
+<div id="detail" role="dialog" aria-modal="true" aria-label="卡牌详情" tabindex="-1">
   <div class="panel" id="detail-panel">
     <div id="detail-body"></div>
     <button class="btn" id="detail-holo">✨ 3D 检视</button>
@@ -184,35 +299,30 @@
   </div>
 </div>
 
-<div id="grave-pick">
+<div id="grave-pick" role="dialog" aria-modal="true" aria-label="选择墓地卡牌" tabindex="-1">
   <div class="panel">
     <div id="grave-pick-body"></div>
   </div>
 </div>
 
 <!-- 通用选牌浮层（恶魔的祭品/谦逊之壶等） -->
-<div id="card-pick">
+<div id="card-pick" role="dialog" aria-modal="true" aria-label="选择卡牌" tabindex="-1">
   <div class="panel">
     <div id="card-pick-body"></div>
   </div>
 </div>
 
-<!-- 集卡册浮层 -->
-</div>
-  </div>
-</div>
-
 <!-- 法术施放全屏闪光 -->
-<div id="spell-flash"><div class="sf-text" id="spell-flash-text"></div></div>
+<div id="spell-flash" aria-hidden="true"><div class="sf-text" id="spell-flash-text"></div></div>
 
 <!-- 战术预览面板（长按卡牌） -->
 <div id="tac-preview"></div>
 
 <!-- 高费单位降临动画 -->
-<div id="epic-fx"></div>
+<div id="epic-fx" aria-hidden="true"></div>
 
 <!-- 交机隐私屏（双人对战） -->
-<div id="pass-screen">
+<div id="pass-screen" role="dialog" aria-modal="true" aria-labelledby="pass-text" tabindex="-1">
   <div class="panel">
     <div class="pass-text" id="pass-text"></div>
     <button class="btn" id="pass-continue">继续</button>
@@ -220,7 +330,7 @@
 </div>
 
 <!-- 开卡包 -->
-<div id="pack-screen">
+<div id="pack-screen" role="dialog" aria-modal="true" aria-labelledby="pack-title" tabindex="-1">
   <div class="panel">
     <div class="v-title" id="pack-title">开卡包</div>
     <div id="pack-cards"></div>
