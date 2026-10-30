@@ -22,18 +22,68 @@ function buildAIDeck() {
   return shuffle(randomDeckDefs());
 }
 
-function initGame(playerDeckDefs, mode, enemyDeckDefs) {
+function initGame(playerDeckDefs, mode, enemyDeckDefs, runBattle) {
   uid = 0;
   logLines = [];
   state = { player: newSide(), enemy: newSide(), phase: 'deploy', round: 0, gameOver: false,
-            mode: mode || 'ai', deploySide: 'player',
+            mode: mode || 'ai', deploySide: 'player', tactics: { player: null, enemy: null },
+            battleSpeed: 1, roundSummary: null, _tacticsActive: false, _runBattle: runBattle === true,
+            _relicState: { phoenixFeatherUsed: false },
             anims: { attacker: null, shaken: [], heroHit: null, dying: [] }, moraleFx: null };
   state.player.deck = shuffle(playerDeckDefs.slice());
   // pvp：enemy 为玩家2 的牌组；ai：随机 AI 牌组
   state.enemy.deck = enemyDeckDefs && enemyDeckDefs.length ? shuffle(enemyDeckDefs.slice()) : buildAIDeck(); // 闯关模式透传敌方牌组
   for (let i = 0; i < 5; i++) { drawCard('player', true); drawCard('enemy', true); } // 对称开局，初始 5 张
+  if (runRelicActive('arcaneTome', 'player')) {
+    drawCard('player', true); drawCard('player', true);
+    log('【遗物·奥术典籍】本场战斗开局额外摸 2 张牌');
+  }
   log(state.mode === 'pvp' ? '战斗开始！（双人对战）' : '战斗开始！');
   startRound();
+}
+
+function inRunBattle() {
+  return !!(state && state._runBattle && RUN && RUN.active && RUN.inBattle);
+}
+
+function runRelicActive(key, side) {
+  return side === 'player' && inRunBattle() &&
+    Array.isArray(RUN.relics) && RUN.relics.indexOf(key) >= 0;
+}
+
+function battleDelay(ms) {
+  const speed = state && state.battleSpeed;
+  return ms / (speed === 2 || speed === 4 ? speed : 1);
+}
+
+function setBattleSpeed(n) {
+  const speed = Number(n);
+  if (!state || [1, 2, 4].indexOf(speed) < 0 || NET.role === 'spectator') return false;
+  if (NET.role === 'guest') {
+    clientSend({ t: 'act', kind: 'battleSpeed', value: speed });
+    return true;
+  }
+  state.battleSpeed = speed;
+  render();
+  return true;
+}
+
+function setTactic(side, key, fromGuest) {
+  if (!state || state.phase !== 'deploy' || state.gameOver || NET.role === 'spectator') return false;
+  if (side !== 'player' && side !== 'enemy') return false;
+  if (key === '') key = null;
+  if (key !== null && !TACTIC_INFO[key]) return false;
+  if (state.mode === 'ai' && side !== 'player') return false;
+  if (state.mode === 'pvp' && side !== state.deploySide) return false;
+  if (NET.role === 'host' && side !== 'player' && fromGuest !== true) return false;
+  if (NET.role === 'guest') {
+    if (side !== 'enemy') return false;
+    clientSend({ t: 'act', kind: 'tactic', key: key });
+    return true;
+  }
+  state.tactics[side] = key;
+  render();
+  return true;
 }
 
 function sideName(side) {
@@ -65,11 +115,74 @@ function log(msg) {
   if (el) { el.innerHTML = logLines.map(l => '<div>' + l + '</div>').join(''); el.scrollTop = el.scrollHeight; }
 }
 
+function currentRoundSummary() {
+  const summary = state && state.roundSummary;
+  return summary && summary.round === state.round && !summary.completed ? summary : null;
+}
+
+function recordRoundKey(text) {
+  const summary = currentRoundSummary();
+  if (!summary) return;
+  summary.keyResults.push(text);
+  if (summary.keyResults.length > 16) summary.keyResults.shift();
+}
+
+function beginRoundSummary() {
+  const current = currentRoundSummary();
+  if (current) {
+    current.tactics = { player: state.tactics.player, enemy: state.tactics.enemy };
+    return current;
+  }
+  state.roundSummary = {
+    round: state.round,
+    tactics: { player: state.tactics.player, enemy: state.tactics.enemy },
+    heroDamage: { player: 0, enemy: 0 },
+    unitsLost: { player: [], enemy: [] },
+    startingHp: { player: state.player.hp, enemy: state.enemy.hp },
+    endingHp: { player: state.player.hp, enemy: state.enemy.hp },
+    outcome: 'ongoing', completed: false, keyResults: [],
+  };
+  return state.roundSummary;
+}
+
+function finishRoundSummary(outcome) {
+  const summary = currentRoundSummary();
+  if (!summary) return;
+  ['player', 'enemy'].forEach(side => {
+    state[side].board.concat(state[side].graveyard).forEach(m => {
+      if (m._tacticRally == null) return;
+      const amount = m._tacticRally;
+      delete m._tacticRally;
+      if (amount > 0 && m.curHp > 0) changeMorale(m, -amount);
+    });
+  });
+  state._tacticsActive = false;
+  recalcAuras();
+  summary.outcome = outcome || 'ongoing';
+  summary.endingHp = { player: state.player.hp, enemy: state.enemy.hp };
+  if (summary.outcome !== 'ongoing') recordRoundKey('对局结束：' + (summary.outcome === 'draw' ? '双方同归于尽' : sideName(summary.outcome) + '获胜'));
+  summary.completed = true;
+  const tacticText = side => TACTIC_INFO[summary.tactics[side]] ? TACTIC_INFO[summary.tactics[side]].name : '无';
+  log('【轮次总结】第 ' + summary.round + ' 轮：' + sideName('player') + '方英雄受伤 ' + summary.heroDamage.player +
+    '，' + sideName('enemy') + '方英雄受伤 ' + summary.heroDamage.enemy +
+    '；单位阵亡 ' + summary.unitsLost.player.length + ' / ' + summary.unitsLost.enemy.length +
+    '；指令 ' + tacticText('player') + ' / ' + tacticText('enemy'));
+}
+
+function damageHero(side, amount) {
+  const value = Number(amount);
+  const dmg = Number.isFinite(value) ? Math.max(0, value) : 0;
+  state[side].hp -= dmg;
+  const summary = currentRoundSummary();
+  if (summary && dmg > 0) summary.heroDamage[side] += dmg;
+  return dmg;
+}
+
 function drawCard(side, silent) {
   const p = state[side];
   if (p.deck.length === 0) {
     p.fatigue++;
-    p.hp -= p.fatigue;
+    damageHero(side, p.fatigue);
     log(sideName(side) + '牌库已空，受到 ' + p.fatigue + ' 点疲劳伤害');
     checkGameOver();
     return;
@@ -99,9 +212,11 @@ function adjArmBonus(p, m) { // 盾墙协防：同排左右相邻的友方单位
   return n;
 }
 function effArmor(m) {
-  if (m.traits.includes('石化') && m.curHp < m.maxHp) return 4;
   const side = state.player.board.indexOf(m) >= 0 ? 'player' : 'enemy';
-  return m.arm + adjArmBonus(state[side], m)
+  const bonus = (state._tacticsActive && state.tactics[side] === 'guard' ? 1 : 0) +
+    (runRelicActive('stoneAegis', side) ? 1 : 0);
+  if (m.traits.includes('石化') && m.curHp < m.maxHp) return 4 + bonus;
+  return m.arm + adjArmBonus(state[side], m) + bonus
     + (m.traits.includes('石像形态') && m.defense ? 2 : 0) + ((m.petrified || 0) > 0 ? 3 : 0)
     + (m.traits.includes('居高临下') && m.row === 0 ? 1 : 0); // 居高临下：前排护甲 +1
 }
@@ -133,8 +248,13 @@ function healHero(side, n) {
 
 // 每轮部署阶段开始：双方同时 +1 水晶并回满、摸牌、再生/中毒结算
 function startRound() {
+  finishRoundSummary();
   state.round++;
   state.phase = 'deploy';
+  state.tactics = { player: null, enemy: null };
+  state._tacticsActive = false;
+  recalcAuras();
+  beginRoundSummary();
   log('—— 第 ' + state.round + ' 轮 · 部署阶段 ——');
   sfx('phase');
   ['player', 'enemy'].forEach(side => {
@@ -207,7 +327,7 @@ function startRound() {
     lifeBoonProc(side, leoricBack);
     drawCard(side);
   });
-  if (RUN && RUN.active && RUN.inBattle && RUN.modifier === 'skeletons' && !state.gameOver) { const sk = findDef('骷髅'); if (sk && state.enemy.board.length < BOARD_CAP) { summonMinion('enemy', sk, 0); log('【万籁俱寂】敌方召唤了一个【骷髅】到前排'); } }
+  if (inRunBattle() && RUN.modifier === 'skeletons' && !state.gameOver) { const sk = findDef('骷髅'); if (sk && state.enemy.board.length < BOARD_CAP) { summonMinion('enemy', sk, 0); log('【万籁俱寂】敌方召唤了一个【骷髅】到前排'); } }
   checkGameOver();
   render();
   // 双人对战：每轮部署从玩家1 开始；本地热座亮交机隐私屏，联机房主直接广播等待部署
@@ -458,8 +578,8 @@ function resolveSpellEffect(side, def, target, costPaid) {
       log('【禁断之炎】：消耗全部剩余 ' + x + ' 点法力！');
       if (x > 0) {
         ['player', 'enemy'].forEach(sd => state[sd].board.slice().forEach(m => dealSpellDamage(def, m, 2 * x)));
-        p.hp -= x;
-        foe.hp -= x;
+        damageHero(side, x);
+        damageHero(foeSide, x);
         log('【禁断之炎】：双方英雄各受到 ' + x + ' 点伤害');
       } else {
         log('【禁断之炎】：没有剩余法力，无事发生');
@@ -846,7 +966,7 @@ function summonMinion(side, def, row) {
   const p = state[side];
   if (p.board.length >= BOARD_CAP) return null;
   const m = makeMinion(def);
-  if (RUN && RUN.active && RUN.inBattle && side === 'enemy' && RUN.modifier === 'dragon') { m.baseAtk += 1; m.atk += 1; } // Boss 规则：巨龙威压
+  if (inRunBattle() && side === 'enemy' && RUN.modifier === 'dragon') { m.baseAtk += 1; m.atk += 1; } // Boss 规则：巨龙威压
   m.row = row == null ? 0 : row;
   p.board.push(m);
   if (isEpicUnit(def)) epicSummonFx(def, m); // 高费/巨型单位降临动画
@@ -1103,7 +1223,10 @@ function recalcAuras() {
       const delta = newMax - m.maxHp;
       m.maxHp = newMax;
       if (delta !== 0) m.curHp = Math.max(1, m.curHp + delta);
-      m.atk = Math.max(0, m.baseAtk + b + adjAtkBonus(p, m) + (m.name.startsWith('狗头人') ? koboldLead : 0) + inspireBonus(m) - (m.traits.includes('石像形态') && m.defense ? 2 : 0)); // 石像形态：守备时攻击 -2
+      const tacticAtk = state._tacticsActive && state.tactics[side] === 'assault' ? 1 : 0;
+      const relicAtk = (runRelicActive('warDrum', side) ? 1 : 0) +
+        (runRelicActive('longBow', side) && m.traits.includes('远程') ? 2 : 0);
+      m.atk = Math.max(0, m.baseAtk + b + adjAtkBonus(p, m) + (m.name.startsWith('狗头人') ? koboldLead : 0) + inspireBonus(m) + tacticAtk + relicAtk - (m.traits.includes('石像形态') && m.defense ? 2 : 0)); // 石像形态：守备时攻击 -2
     });
   });
 }
@@ -1314,7 +1437,8 @@ function executeCounter(target, attacker, attackerSide, shaken, depth, isDefense
   const vg = traitLv(target, '复仇'); // 复仇X：每次反击前攻击 +X（永久累积）
   if (vg > 0) { target.baseAtk += vg; target.atk += vg; log('【' + target.name + '】复仇：攻击 +' + vg + '（当前 ' + target.atk + '）'); }
   if (!isDefense) target.counterLeft--;
-  const back = attackDamage(target, attacker) + traitLv(target, '反扑'); // 反扑X：反击伤害 +X
+  const back = attackDamage(target, attacker) + traitLv(target, '反扑') +
+    (runRelicActive('spikedShield', otherSide(attackerSide)) ? 2 : 0); // 反扑X：反击伤害 +X
   if (back <= 0) {
     log('【' + target.name + '】' + (isDefense ? '（守备）' : '') + '反击【' + attacker.name + '】，伤害被护甲完全抵挡' + (isDefense ? '' : '（本阶段反击机会已用）'));
     return;
@@ -1368,7 +1492,7 @@ function actSpellFxColor(actSpell) {
 // 流转：造成正面伤害 +1、击杀额外 +1；被攻击/反击且受到伤害 -1；
 // 守备方格挡全部伤害时伤害来源 -1、守备方 +1；回合开始时全场同阵营 +1、每多一种阵营 -1。
 function changeMorale(m, delta) {
-  if (RUN && RUN.active && RUN.inBattle && RUN.modifier === 'calm') { m.morale = 0; return; } // Boss 规则：心如止水
+  if (inRunBattle() && RUN.modifier === 'calm') { m.morale = 0; return; } // Boss 规则：心如止水
   if (moraleImmune(m)) return; // 墓园/元素单位不受士气影响
   if (m.faceDown) return; // 盖牌不参与士气结算
   m.morale = Math.max(-10, Math.min(10, (m.morale || 0) + delta));
@@ -1394,7 +1518,13 @@ function moraleFx(m, kind) {
     if (!state) return;
     if (state.moraleFx && state.moraleFx.uid === m.uid) state.moraleFx = null;
     render();
-  }, 600);
+  }, battleDelay(600));
+}
+
+function onAttackKill(attackerSide) {
+  if (!runRelicActive('bloodChalice', attackerSide)) return;
+  healHero(attackerSide, 2);
+  recordRoundKey('【遗物·鲜血圣杯】击杀后英雄恢复 2 点生命');
 }
 
 // 对随从造成攻击伤害（来源为 attacker）。日志显示造成的伤害与目标剩余生命（若存活）。
@@ -1426,8 +1556,12 @@ function dealAttackDamage(attacker, attackerSide, target, dmg, shaken, depth, la
     }
     return;
   }
+  const wasAlive = target.curHp > 0;
   target.curHp -= dmg;
-  if (target.curHp <= 0) { target._killedBy = attacker; target._killedBySide = attackerSide; } // 记录致死攻击来源与方位（魔童/北宋之壶亡语等用）
+  if (target.curHp <= 0) {
+    target._killedBy = attacker; target._killedBySide = attackerSide;
+    if (wasAlive) onAttackKill(attackerSide);
+  } // 记录致死攻击来源与方位（魔童/北宋之壶亡语等用）
   shaken.push(target.uid);
   // 士气流转：造成正面伤害 +1；被攻击/反击且受到伤害 -1；击杀额外 +1
   changeMorale(attacker, 1);
@@ -1525,7 +1659,7 @@ function doAttack(side, attackerUid, targetUid) {
       if (defender.curHp <= 0) { // 被自己的揭示效果波及死亡，攻击落空
         checkGameOver();
         state.anims = { attacker: attacker.uid, shaken: shaken, heroHit: null, dying: dyingR };
-        setTimeout(() => { if (!state) return; state.anims = { attacker: null, shaken: [], heroHit: null, dying: [] }; render(); }, 450);
+        setTimeout(() => { if (!state) return; state.anims = { attacker: null, shaken: [], heroHit: null, dying: [] }; render(); }, battleDelay(450));
         render();
         return true;
       }
@@ -1533,6 +1667,7 @@ function doAttack(side, attackerUid, targetUid) {
     // 死亡凝视：25% 概率直接消灭目标随从（无视生命与护甲；凝视未致死则正常结算攻击）
     if (attacker.traits.includes('死亡凝视') && Math.random() < 0.25) {
       defender.curHp = 0;
+      onAttackKill(side);
       shaken.push(defender.uid);
       log('【' + attacker.name + '】的死亡凝视发动：【' + defender.name + '】被直接消灭！');
       sfx('death');
@@ -1567,14 +1702,15 @@ function doAttack(side, attackerUid, targetUid) {
       }
     }
   } else {
-    foe.hp -= attacker.atk;
+    const heroDmg = damageHero(foeSide, attacker.atk);
     changeMorale(attacker, 1); // 士气：造成正面伤害 +1（对英雄同样生效）
-    log('【' + attacker.name + '】攻击' + sideName(foeSide) + '英雄，造成 ' + attacker.atk + ' 点伤害');
+    log('【' + attacker.name + '】攻击' + sideName(foeSide) + '英雄，造成 ' + heroDmg + ' 点伤害');
+    recordRoundKey('【' + attacker.name + '】对' + sideName(foeSide) + '英雄造成 ' + heroDmg + ' 点伤害');
     sfx('hit');
     // 吸血：对英雄造成的伤害等量恢复自身生命（封顶）
     if (attacker.traits.includes('吸血')) {
       const healBefore = attacker.curHp;
-      attacker.curHp = Math.min(attacker.maxHp, attacker.curHp + attacker.atk);
+      attacker.curHp = Math.min(attacker.maxHp, attacker.curHp + heroDmg);
       if (attacker.curHp > healBefore) log('【' + attacker.name + '】吸血：自身恢复 ' + (attacker.curHp - healBefore) + ' 点生命');
     }
     // 掠夺：攻击敌方英雄时额外获得 5 金币
@@ -1602,14 +1738,26 @@ function doAttack(side, attackerUid, targetUid) {
     if (!state) return;
     state.anims = { attacker: null, shaken: [], heroHit: null, dying: [] };
     render();
-  }, 450);
+  }, battleDelay(450));
   return true;
 }
 
 function cleanupDead(side) {
   const p = state[side];
-  const dead = p.board.filter(m => m.curHp <= 0);
+  let dead = p.board.filter(m => m.curHp <= 0);
   if (dead.length === 0) return [];
+  const relicState = state._relicState || (state._relicState = { phoenixFeatherUsed: false });
+  if (runRelicActive('phoenixFeather', side) && !relicState.phoenixFeatherUsed) {
+    const saved = dead.shift();
+    saved.curHp = 1;
+    saved._killedBy = null;
+    saved._killedBySide = null;
+    relicState.phoenixFeatherUsed = true;
+    log('【遗物·凤凰之羽】让【' + saved.name + '】以 1 点生命留在场上');
+    recordRoundKey('【凤凰之羽】挽救了【' + saved.name + '】');
+    sfx('heal');
+    if (dead.length === 0) { recalcAuras(); return []; }
+  }
   // 记录死亡时的排内位置（供"先晃动再消失"的死亡动画渲染幽灵卡）
   const dying = dead.map(m => {
     const rowMins = p.board.filter(o => o.row === m.row);
@@ -1617,6 +1765,8 @@ function cleanupDead(side) {
   });
   p.board = p.board.filter(m => m.curHp > 0);
   dead.forEach(m => {
+    const summary = currentRoundSummary();
+    if (summary) summary.unitsLost[side].push({ uid: m.uid, name: m.name });
     log('【' + m.name + '】被消灭');
     sfx('death');
     // 壶类：被击败时不进墓地，加入对方卡组（强欲置顶/谦逊洗入；驱魔封印则正常进墓）
@@ -1702,7 +1852,8 @@ function checkGameOver() {
   const pDead = state.player.hp <= 0, eDead = state.enemy.hp <= 0;
   if (!pDead && !eDead) return;
   state.gameOver = true;
-  if (RUN && RUN.active && RUN.inBattle) { roguelikeBattleEnd(!pDead || (pDead && eDead)); return; } // 闯关模式：分流到奖励/纪念流程
+  finishRoundSummary(pDead && eDead ? 'draw' : (eDead ? 'player' : 'enemy'));
+  if (inRunBattle()) { roguelikeBattleEnd(!pDead || (pDead && eDead)); return; } // 闯关模式：分流到奖励/纪念流程
   let text;
   if (state.mode === 'pvp') {
     if (eDead && !pDead) text = '玩家 1 获胜！';
@@ -2369,10 +2520,72 @@ function aiSetDefense(side) {
   });
 }
 
+function chooseAITactic() {
+  const me = state.enemy, foe = state.player;
+  const mine = me.board.filter(m => !m.faceDown && !m.isSpellShell);
+  if (!mine.length) return null;
+  const visibleFoe = foe.board.filter(m => !m.faceDown && !m.isSpellShell);
+  const attackers = mine.filter(m => !m.defense && !m.blind && !(m.petrified > 0) && awake(m) && m.atk > 0);
+  const attackPower = attackers.reduce((sum, m) => sum + Math.max(0, m.atk), 0);
+  const incoming = visibleFoe.filter(m => !m.defense).reduce((sum, m) => sum + Math.max(0, m.atk), 0);
+  const moraleUnits = mine.filter(m => !moraleImmune(m));
+  const negative = moraleUnits.filter(m => (m.morale || 0) < 0).length;
+  const lethal = foe.board.length === 0 && attackers.length > 0 && foe.hp <= attackPower + attackers.length;
+  const scores = {
+    assault: attackers.length ? 2 + attackers.length * 1.2 + attackPower * 0.15 + (lethal ? 7 : 0) : -2,
+    guard: 1.5 + incoming * 0.18 + (me.hp <= me.maxHp * 0.5 ? 4 : 0) +
+      (visibleFoe.length > mine.length ? 2 : 0) + mine.filter(m => m.defense).length,
+    rally: moraleUnits.length ? 1 + moraleUnits.length * 1.1 + negative * 2.5 : -Infinity,
+  };
+  if (inRunBattle() && RUN.modifier === 'calm') scores.rally = -Infinity;
+  const keys = ['assault', 'guard', 'rally'];
+  let best = null, bestScore = -Infinity;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[(i + state.round + mine.length) % keys.length];
+    if (scores[key] > bestScore) { best = key; bestScore = scores[key]; }
+  }
+  return best;
+}
+
+function activateTactics() {
+  if (state.mode === 'ai') state.tactics.enemy = chooseAITactic();
+  state._tacticsActive = true;
+  beginRoundSummary();
+  ['player', 'enemy'].forEach(side => {
+    const key = state.tactics[side];
+    if (!key) return;
+    let actual = '';
+    if (key === 'rally') {
+      let total = 0;
+      state[side].board.forEach(m => {
+        const before = m.morale || 0;
+        changeMorale(m, 2);
+        const gained = (m.morale || 0) - before;
+        if (gained > 0) m._tacticRally = gained;
+        total += gained;
+      });
+      actual = '（实际共提升 ' + total + ' 点）';
+    }
+    const text = sideName(side) + '发动战术【' + TACTIC_INFO[key].name + '】：' + TACTIC_INFO[key].desc + actual;
+    log(text);
+    recordRoundKey(text);
+  });
+  if (runRelicActive('rallyBanner', 'player') && RUN.modifier !== 'calm') {
+    let total = 0;
+    state.player.board.forEach(m => {
+      const before = m.morale || 0;
+      changeMorale(m, 1);
+      total += (m.morale || 0) - before;
+    });
+    log('【遗物·昂扬战旗】己方全军士气 +1（实际共提升 ' + total + ' 点）');
+    recordRoundKey('【昂扬战旗】触发，全军士气 +1');
+  }
+}
+
 function combatTick() {
   if (state.gameOver) { render(); return; }
   const m = nextActor();
-  if (!m) { startRound(); return; } // 全部行动完 → 下一轮部署阶段
+  if (!m) { finishRoundSummary(); startRound(); return; } // 全部行动完 → 下一轮部署阶段
   const side = state.player.board.indexOf(m) >= 0 ? 'player' : 'enemy';
   // 负士气：|x|*10% 概率本回合无法行动
   if (moraleFail(m)) {
@@ -2380,7 +2593,7 @@ function combatTick() {
     log('【' + m.name + '】士气低落，本回合无法行动（士气 ' + m.morale + '）');
     moraleFx(m, 'down');
     render();
-    if (!state.gameOver) setTimeout(combatTick, 650);
+    if (!state.gameOver) setTimeout(combatTick, battleDelay(650));
     return;
   }
   autoAttack(side, m);
@@ -2389,11 +2602,12 @@ function combatTick() {
     m._extraUsed = true;
     m.canAttack = true; // 恢复行动资格以保证连动
     log('【' + m.name + '】士气高涨，获得额外行动机会！（士气 +' + m.morale + '）');
+    recordRoundKey('【' + m.name + '】士气高涨，立即额外行动一次');
     moraleFx(m, 'up');
     autoAttack(side, m); // 士气高涨：同一单位立即连续行动
   }
   render();
-  if (!state.gameOver) setTimeout(combatTick, 650);
+  if (!state.gameOver) setTimeout(combatTick, battleDelay(650));
 }
 
 // 主按钮（开始战斗 / 完成部署）：ai 直接开打；本地热座交机；联机房主/guest 各按部署方行动
@@ -2444,6 +2658,8 @@ function startCombat() {
   while (state.mode === 'ai' && aiPlayStep()) {} // AI 部署（仅人机模式）
   if (state.mode === 'ai') aiCastSpells(); // AI 施放单位法术
   if (state.mode === 'ai') aiSetDefense(); // AI 守备姿态：攻击力 ≤1 的单位转为守备表示
+  if (state.gameOver) return;
+  activateTactics();
   // 战斗阶段开始前：鼓舞/威吓光环结算（大天使全场 +1，鬼龙敌方全场 -1）
   ['player', 'enemy'].forEach(sd => {
     const me = state[sd], foe = state[otherSide(sd)];
@@ -2458,6 +2674,7 @@ function startCombat() {
   });
   // 战斗阶段开始：双方所有随从重置反击机会（默认 1 次；反击X 特性为 X 次，如皇家狮鹫反击2）
   ['player', 'enemy'].forEach(s => state[s].board.forEach(m => { m.counterLeft = Math.max(1, traitLv(m, '反击')); m._extraUsed = false; m._vanishUsed = false; }));
+  recalcAuras();
   render();
-  setTimeout(combatTick, 650);
+  setTimeout(combatTick, battleDelay(650));
 }

@@ -118,6 +118,21 @@ const FACTION_BOX_PRICE = 600;  // 阵营卡盒价格（同阵营 5 包共 25 �
 const FACTION_BOX_PACKS = 5;
 const SHOP_PRICES = { remove: 50, buyCard: 100, heal: 40 }; // 闯关商店
 const RUN_REWARDS = { battle: 30, elite: 60, boss: 120, finalBoss: 300 }; // 闯关节点金币奖励
+const TACTIC_INFO = {
+  assault: { name: '猛攻', desc: '本轮进攻阶段，己方所有单位攻击 +1' },
+  guard: { name: '坚守', desc: '本轮进攻阶段，己方所有单位有效护甲 +1' },
+  rally: { name: '集结', desc: '本轮进攻阶段开始时，己方所有可受影响单位士气 +2' },
+};
+const RUN_RELICS = {
+  warDrum: { name: '战鼓', desc: '远征战斗中，己方所有单位攻击 +1。' },
+  stoneAegis: { name: '磐石徽记', desc: '远征战斗中，己方所有单位有效护甲 +1。' },
+  longBow: { name: '猎手长弓', desc: '远征战斗中，己方远程单位攻击 +2。' },
+  spikedShield: { name: '荆棘盾牌', desc: '远征战斗中，己方单位的反击伤害 +2。' },
+  rallyBanner: { name: '昂扬战旗', desc: '每轮进攻阶段开始时，己方所有可受影响单位士气 +1。' },
+  bloodChalice: { name: '鲜血圣杯', desc: '己方单位用攻击或反击击杀敌方单位时，己方英雄恢复 2 点生命。' },
+  arcaneTome: { name: '奥术典籍', desc: '每场远征节点战开局额外摸 2 张牌。' },
+  phoenixFeather: { name: '凤凰之羽', desc: '每场远征节点战中，第一个阵亡的己方单位以 1 点生命留在场上。' },
+};
 
 // ---------- 收藏与金币（localStorage 持久化；无 localStorage 环境用内存兜底，游戏不炸） ----------
 const storage = (function () {

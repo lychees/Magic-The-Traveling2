@@ -72,6 +72,9 @@ function makeSnapshot(forSide) {
   const snap = {
     t: 'state', phase: state.phase, round: state.round, deploySide: state.deploySide,
     gameOver: state.gameOver, anims: state.anims, logLines: logLines.slice(),
+    tactics: { player: state.tactics.player, enemy: state.tactics.enemy },
+    tacticsActive: !!state._tacticsActive, battleSpeed: state.battleSpeed || 1,
+    roundSummary: state.roundSummary || null,
     hostName: NET.hostName, guestName: NET.guestName,
     sides: {},
   };
@@ -149,7 +152,13 @@ function hostHandleDeck(conn, msg) {
 
 // 房主权威：guest 动作校验后执行，非法回 actReject
 function hostHandleAct(conn, msg) {
-  if (conn !== NET.guestConn || !state || state.gameOver) return;
+  if (conn !== NET.guestConn || !state) return;
+  if (msg.kind === 'battleSpeed') {
+    if (!setBattleSpeed(msg.value)) conn.send({ t: 'actReject', reason: '战斗速度无效' });
+    netBroadcast();
+    return;
+  }
+  if (state.gameOver) return;
   if (state.phase !== 'deploy' || state.deploySide !== 'enemy') {
     conn.send({ t: 'actReject', reason: '现在不是你的部署阶段' });
     return;
@@ -193,6 +202,7 @@ function hostHandleAct(conn, msg) {
       ok = playCard('enemy', i, null, null, true);
       break;
     }
+    case 'tactic': ok = setTactic('enemy', msg.key, true); break;
     case 'endDeploy':
       if (state.deploySide === state._firstSide) {
         state.deploySide = otherSide(state.deploySide);
@@ -309,6 +319,10 @@ function applySnapshot(snap) {
     player: mkSide('player'), enemy: mkSide('enemy'),
     mode: 'pvp', phase: snap.phase, round: snap.round, deploySide: snap.deploySide,
     gameOver: snap.gameOver,
+    tactics: Object.assign({ player: null, enemy: null }, snap.tactics || {}),
+    _tacticsActive: !!snap.tacticsActive,
+    battleSpeed: [1, 2, 4].indexOf(snap.battleSpeed) >= 0 ? snap.battleSpeed : 1,
+    roundSummary: snap.roundSummary || null,
     anims: snap.anims || { attacker: null, shaken: [], heroHit: null, dying: [] },
   };
   logLines = snap.logLines || [];
