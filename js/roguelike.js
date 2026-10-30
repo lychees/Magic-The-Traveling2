@@ -70,7 +70,16 @@ let RUN = null;
 function saveRun() { try { storage.setItem('mtcg-run', JSON.stringify(RUN)); } catch (e) {} }
 function loadRun() {
   try { RUN = JSON.parse(storage.getItem('mtcg-run') || 'null'); } catch (e) { RUN = null; }
-  if (!RUN || !RUN.active || !RUN.map || !RUN.edges) RUN = null;
+  if (!RUN || !RUN.active || !RUN.map || !RUN.edges) { RUN = null; return; }
+  const owned = Array.isArray(RUN.relics) ? RUN.relics : [];
+  RUN.relics = Array.from(new Set(owned.filter(id => RUN_RELICS[id])));
+  if (!Array.isArray(RUN._relicDraft) || !RUN._relicDraft.some(id => RUN_RELICS[id] && RUN.relics.indexOf(id) < 0)) {
+    RUN._relicDraft = null;
+    RUN._afterRelic = null;
+  } else {
+    RUN._relicDraft = Array.from(new Set(RUN._relicDraft.filter(id => RUN_RELICS[id] && RUN.relics.indexOf(id) < 0))).slice(0, 3);
+  }
+  saveRun();
 }
 function clearRun() { RUN = null; try { storage.removeItem('mtcg-run'); } catch (e) {} }
 function getMemorials() { try { return JSON.parse(storage.getItem('mtcg-memorials') || '[]') || []; } catch (e) { return []; } }
@@ -90,11 +99,17 @@ function runStarterDeck(race) {
 }
 
 function startRun(race) {
-  RUN = { active: true, race: race, deck: runStarterDeck(race), floor: 0, map: genRunMap(), path: [], curNode: null, edges: null, hp: 25, maxHp: 25, kills: 0, rounds: 0, modifier: null, campResult: null, eventText: null, _panel: 'map' };
+  RUN = { active: true, race: race, deck: runStarterDeck(race), floor: 0, map: genRunMap(), path: [], curNode: null, edges: null, hp: 25, maxHp: 25, kills: 0, rounds: 0, modifier: null, relics: [], campResult: null, eventText: null, _panel: 'map' };
   RUN.edges = genRunEdges(RUN.map);
   saveRun();
   openRoguelike('map');
   sfx('phase');
+}
+
+function rlResumePanel() {
+  if (!RUN) return 'raceSelect';
+  if (RUN._relicDraft && RUN._relicDraft.length) return 'relic';
+  return RUN._panel === 'victory' ? 'victory' : 'map';
 }
 
 function openRoguelike(panel) {
@@ -159,6 +174,11 @@ function enemyDeckFor(node) {
   return randomDeckDefs(CARD_DEFS.filter(d => noMem(d) && d.cost <= 5).map(d => ({ def: d, max: 2 })));
 }
 
+function relicDraftChoices() {
+  const pool = Object.keys(RUN_RELICS).filter(id => RUN.relics.indexOf(id) < 0);
+  return shuffle(pool).slice(0, 3);
+}
+
 function startNodeBattle() {
   const node = RUN.curNode;
   RUN.modifier = node === 'finalBoss' ? 'dragon' : node === 'boss' ? (Math.random() < 0.5 ? 'skeletons' : 'calm') : null;
@@ -180,6 +200,7 @@ function roguelikeBattleEnd(won) {
   const node = RUN.curNode;
   RUN.rounds += state.round;
   RUN.kills += state.enemy.graveyard.length;
+  RUN.inBattle = false;
   if (!won) { runDefeat(); return; }
   RUN.hp = Math.max(1, state.player.hp);
   const reward = RUN_REWARDS[node] || RUN_REWARDS.battle;
@@ -187,11 +208,25 @@ function roguelikeBattleEnd(won) {
   saveEconomy();
   updateGoldUi();
   sfx('win');
-  if (node === 'finalBoss') { runVictory(); return; }
-  RUN.curNode = null;
-  RUN.floor++;
+  const afterRelic = node === 'finalBoss' ? 'victory' : 'draft';
+  if (node !== 'finalBoss') {
+    RUN.curNode = null;
+    RUN.floor++;
+  }
+  if (node === 'elite' || node === 'boss' || node === 'finalBoss') {
+    const picks = relicDraftChoices();
+    if (picks.length) {
+      RUN._relicDraft = picks;
+      RUN._afterRelic = afterRelic;
+      RUN._panel = 'relic';
+      saveRun();
+      openRoguelike('relic');
+      return;
+    }
+  }
   saveRun();
-  openRoguelike('draft');
+  if (afterRelic === 'victory') runVictory();
+  else openRoguelike('draft');
 }
 
 function runDefeat() {
@@ -209,8 +244,17 @@ function runVictory() {
   const prize = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   if (prize) { collection[prize.name] = (collection[prize.name] || 0) + 1; saveEconomy(); }
   RUN._prize = prize;
+  RUN._panel = 'victory';
+  saveRun();
   sfx('win');
   openRoguelike('victory');
+}
+
+function rlRelicsHtml() {
+  const relics = RUN.relics || [];
+  let h = '<div class="rl-sub">当前遗物（' + relics.length + '）</div>';
+  if (!relics.length) return h + '<div class="rl-note">尚未获得遗物。击败精英与 Boss 后可三选一。</div>';
+  return h + relics.map(id => '<div class="rl-note"><strong>【' + RUN_RELICS[id].name + '】</strong>' + RUN_RELICS[id].desc + '</div>').join('');
 }
 
 function rlCardImg(def, cls) {
@@ -252,8 +296,15 @@ function renderRoguelike(panel) {
       h += '<div class="rl-title">' + RUN_NODE_INFO[node].icon + ' ' + RUN_NODE_INFO[node].name + '</div>' + mod +
         '<button class="btn btn-primary" data-rl="enter-node">进入战斗</button>';
     }
+    h += rlRelicsHtml();
     h += '<div class="rl-sub">牌组（' + RUN.deck.length + '）</div><div class="rl-deck-list">' + rlDeckHtml() + '</div>';
     h += '<div style="margin-top:16px"><button class="btn btn-danger" data-rl="abandon">放弃闯关</button></div>';
+  } else if (panel === 'relic') {
+    const picks = RUN._relicDraft || [];
+    h += '<div class="rl-status">第 ' + RUN.floor + ' / ' + RUN.map.length + ' 层 · ' + RUN.race + ' · ❤️ ' + RUN.hp + '/' + RUN.maxHp + '</div>';
+    h += '<div class="rl-title">遗物奖励：选择一件加入本次远征</div><div class="rl-cards">' +
+      picks.map((id, i) => '<div class="rl-card" data-rl="relic-pick" data-i="' + i + '"><div class="rl-title">【' + RUN_RELICS[id].name + '】</div><div class="rl-note">' + RUN_RELICS[id].desc + '</div></div>').join('') + '</div>';
+    h += rlRelicsHtml();
   } else if (panel === 'draft') {
     const picks = draftChoices();
     RUN._draft = picks;
@@ -306,6 +357,20 @@ function rlAction(act, ds) {
   }
   if (act === 'enter-node') { startNodeBattle(); return; }
   if (act === 'enter-event') { resolveEventNode(); renderRoguelike('event'); return; }
+  if (act === 'relic-pick') {
+    if (RUN._panel !== 'relic' || !Array.isArray(RUN._relicDraft)) return;
+    const id = RUN._relicDraft[parseInt(ds.i, 10)];
+    if (!RUN_RELICS[id] || RUN.relics.indexOf(id) >= 0) return;
+    RUN.relics.push(id);
+    log('【闯关】获得遗物【' + RUN_RELICS[id].name + '】');
+    const next = RUN._afterRelic;
+    RUN._relicDraft = null;
+    RUN._afterRelic = null;
+    saveRun();
+    if (next === 'victory') runVictory();
+    else openRoguelike('draft');
+    return;
+  }
   if (act === 'draft-pick') {
     const d = RUN._draft[parseInt(ds.i, 10)];
     if (d) { RUN.deck.push(d); log('【闯关】获得【' + d.name + '】'); }
@@ -417,5 +482,5 @@ function resolveEventNode() {
 
 document.getElementById('open-roguelike').addEventListener('click', () => {
   loadRun();
-  openRoguelike(RUN ? 'map' : 'raceSelect');
+  openRoguelike(RUN ? rlResumePanel() : 'raceSelect');
 });
