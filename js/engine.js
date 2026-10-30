@@ -22,12 +22,12 @@ function buildAIDeck() {
   return shuffle(randomDeckDefs());
 }
 
-function initGame(playerDeckDefs, mode, enemyDeckDefs) {
+function initGame(playerDeckDefs, mode, enemyDeckDefs, runBattle) {
   uid = 0;
   logLines = [];
   state = { player: newSide(), enemy: newSide(), phase: 'deploy', round: 0, gameOver: false,
             mode: mode || 'ai', deploySide: 'player', tactics: { player: null, enemy: null },
-            battleSpeed: 1, roundSummary: null, _tacticsActive: false,
+            battleSpeed: 1, roundSummary: null, _tacticsActive: false, _runBattle: runBattle === true,
             _relicState: { phoenixFeatherUsed: false },
             anims: { attacker: null, shaken: [], heroHit: null, dying: [] }, moraleFx: null };
   state.player.deck = shuffle(playerDeckDefs.slice());
@@ -42,9 +42,13 @@ function initGame(playerDeckDefs, mode, enemyDeckDefs) {
   startRound();
 }
 
+function inRunBattle() {
+  return !!(state && state._runBattle && RUN && RUN.active && RUN.inBattle);
+}
+
 function runRelicActive(key, side) {
-  return side === 'player' && !!(RUN && RUN.active && RUN.inBattle &&
-    Array.isArray(RUN.relics) && RUN.relics.indexOf(key) >= 0);
+  return side === 'player' && inRunBattle() &&
+    Array.isArray(RUN.relics) && RUN.relics.indexOf(key) >= 0;
 }
 
 function battleDelay(ms) {
@@ -124,6 +128,11 @@ function recordRoundKey(text) {
 }
 
 function beginRoundSummary() {
+  const current = currentRoundSummary();
+  if (current) {
+    current.tactics = { player: state.tactics.player, enemy: state.tactics.enemy };
+    return current;
+  }
   state.roundSummary = {
     round: state.round,
     tactics: { player: state.tactics.player, enemy: state.tactics.enemy },
@@ -133,6 +142,7 @@ function beginRoundSummary() {
     endingHp: { player: state.player.hp, enemy: state.enemy.hp },
     outcome: 'ongoing', completed: false, keyResults: [],
   };
+  return state.roundSummary;
 }
 
 function finishRoundSummary(outcome) {
@@ -244,6 +254,7 @@ function startRound() {
   state.tactics = { player: null, enemy: null };
   state._tacticsActive = false;
   recalcAuras();
+  beginRoundSummary();
   log('—— 第 ' + state.round + ' 轮 · 部署阶段 ——');
   sfx('phase');
   ['player', 'enemy'].forEach(side => {
@@ -316,7 +327,7 @@ function startRound() {
     lifeBoonProc(side, leoricBack);
     drawCard(side);
   });
-  if (RUN && RUN.active && RUN.inBattle && RUN.modifier === 'skeletons' && !state.gameOver) { const sk = findDef('骷髅'); if (sk && state.enemy.board.length < BOARD_CAP) { summonMinion('enemy', sk, 0); log('【万籁俱寂】敌方召唤了一个【骷髅】到前排'); } }
+  if (inRunBattle() && RUN.modifier === 'skeletons' && !state.gameOver) { const sk = findDef('骷髅'); if (sk && state.enemy.board.length < BOARD_CAP) { summonMinion('enemy', sk, 0); log('【万籁俱寂】敌方召唤了一个【骷髅】到前排'); } }
   checkGameOver();
   render();
   // 双人对战：每轮部署从玩家1 开始；本地热座亮交机隐私屏，联机房主直接广播等待部署
@@ -955,7 +966,7 @@ function summonMinion(side, def, row) {
   const p = state[side];
   if (p.board.length >= BOARD_CAP) return null;
   const m = makeMinion(def);
-  if (RUN && RUN.active && RUN.inBattle && side === 'enemy' && RUN.modifier === 'dragon') { m.baseAtk += 1; m.atk += 1; } // Boss 规则：巨龙威压
+  if (inRunBattle() && side === 'enemy' && RUN.modifier === 'dragon') { m.baseAtk += 1; m.atk += 1; } // Boss 规则：巨龙威压
   m.row = row == null ? 0 : row;
   p.board.push(m);
   if (isEpicUnit(def)) epicSummonFx(def, m); // 高费/巨型单位降临动画
@@ -1481,7 +1492,7 @@ function actSpellFxColor(actSpell) {
 // 流转：造成正面伤害 +1、击杀额外 +1；被攻击/反击且受到伤害 -1；
 // 守备方格挡全部伤害时伤害来源 -1、守备方 +1；回合开始时全场同阵营 +1、每多一种阵营 -1。
 function changeMorale(m, delta) {
-  if (RUN && RUN.active && RUN.inBattle && RUN.modifier === 'calm') { m.morale = 0; return; } // Boss 规则：心如止水
+  if (inRunBattle() && RUN.modifier === 'calm') { m.morale = 0; return; } // Boss 规则：心如止水
   if (moraleImmune(m)) return; // 墓园/元素单位不受士气影响
   if (m.faceDown) return; // 盖牌不参与士气结算
   m.morale = Math.max(-10, Math.min(10, (m.morale || 0) + delta));
@@ -1842,7 +1853,7 @@ function checkGameOver() {
   if (!pDead && !eDead) return;
   state.gameOver = true;
   finishRoundSummary(pDead && eDead ? 'draw' : (eDead ? 'player' : 'enemy'));
-  if (RUN && RUN.active && RUN.inBattle) { roguelikeBattleEnd(!pDead || (pDead && eDead)); return; } // 闯关模式：分流到奖励/纪念流程
+  if (inRunBattle()) { roguelikeBattleEnd(!pDead || (pDead && eDead)); return; } // 闯关模式：分流到奖励/纪念流程
   let text;
   if (state.mode === 'pvp') {
     if (eDead && !pDead) text = '玩家 1 获胜！';
@@ -2526,7 +2537,7 @@ function chooseAITactic() {
       (visibleFoe.length > mine.length ? 2 : 0) + mine.filter(m => m.defense).length,
     rally: moraleUnits.length ? 1 + moraleUnits.length * 1.1 + negative * 2.5 : -Infinity,
   };
-  if (RUN && RUN.active && RUN.inBattle && RUN.modifier === 'calm') scores.rally = -Infinity;
+  if (inRunBattle() && RUN.modifier === 'calm') scores.rally = -Infinity;
   const keys = ['assault', 'guard', 'rally'];
   let best = null, bestScore = -Infinity;
   for (let i = 0; i < keys.length; i++) {

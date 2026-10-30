@@ -187,10 +187,14 @@ function startNodeBattle() {
   saveRun();
   document.getElementById('roguelike').style.display = 'none';
   showGame();
-  initGame(RUN.deck.slice(), 'ai', enemyDefs);
+  initGame(RUN.deck.slice(), 'ai', enemyDefs, true);
   state.player.hp = state.player.maxHp = RUN.hp;
   if (node === 'boss') state.enemy.hp = state.enemy.maxHp = 25;
   if (node === 'finalBoss') state.enemy.hp = state.enemy.maxHp = 30;
+  ['player', 'enemy'].forEach(side => {
+    state.roundSummary.startingHp[side] = state[side].hp;
+    state.roundSummary.endingHp[side] = state[side].hp;
+  });
   if (RUN.modifier) log('Boss 规则：【' + RUN_MODIFIERS[RUN.modifier].name + '】' + RUN_MODIFIERS[RUN.modifier].desc);
   render();
 }
