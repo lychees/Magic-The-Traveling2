@@ -76,7 +76,7 @@
 
 ## 6. 本次 8 种遗物
 
-遗物只作用于 `RUN.active && RUN.inBattle` 的远征玩家侧，普通对局和敌方无效。定义表是 `RUN_RELICS`，存档只存 ID。
+遗物只作用于真实远征节点战中的玩家侧，普通对局和敌方无效。只有 `startNodeBattle` 通过 `initGame(...,true)` 建立 `state._runBattle`；`inRunBattle()` 同时检查 `state._runBattle && RUN.active && RUN.inBattle`，统一约束遗物、Boss 规则与远征结算。普通 `initGame` 默认没有该标记，即使 RUN.inBattle 残留也不会获得遗物/Boss 效果或误入远征结算。定义表是 `RUN_RELICS`，存档只存 ID。
 
 | ID | 中文 | 精确效果 |
 | --- | --- | --- |
