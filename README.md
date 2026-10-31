@@ -2,7 +2,7 @@
 
 H3 题材的中文三排卡牌对战游戏：组牌、布阵、选择每轮战术，然后观看自动战斗并用轮次摘要复盘。零构建纯静态，主游戏打开 `index.html` 即玩。
 
-在线地址：<https://lychees.github.io/Magic-The-Traveling/>
+在线地址：<https://lychees.github.io/Magic-The-Traveling2/>
 
 ## 本次现代化版本
 
