@@ -1,7 +1,7 @@
 # AGENTS.md — Magic The Traveling（使魔卡牌对战）
 
 零构建纯静态网页卡牌游戏（H3 题材，13 阵营 398 卡：336 单位 + 62 法术），plain script + 独立 holo ES module，GitHub Pages 部署。
-在线地址：<https://lychees.github.io/Magic-The-Traveling/>
+在线地址：<https://lychees.github.io/Magic-The-Traveling2/>
 
 ## 快速命令
 
@@ -19,7 +19,10 @@ for f in js/*.js tools/*.js; do node --check "$f" || exit 1; done
 # 阵营默认卡组仿真（不是真人 meta 结论）
 node tools/simulate.js 20
 
-# 部署：.deploy/ 是 GitHub 仓库 lychees/Magic-The-Traveling 的克隆（Pages 跟踪 main 根目录）
+# 首次准备部署克隆（已有 .deploy/ 时跳过）
+git clone https://github.com/lychees/Magic-The-Traveling2.git .deploy
+
+# 部署：.deploy/ 是 GitHub 仓库 lychees/Magic-The-Traveling2 的克隆（Pages 发布 main 分支根目录）
 cp index.html cards.json README.md PRODUCT.md DESIGN.md AGENTS.md style.css card-viewer.html .deploy/
 cp -r js tools docs vendor .deploy/
 cd .deploy && git add -A && git commit -m "..." && git push origin main
